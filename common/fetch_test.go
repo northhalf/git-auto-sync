@@ -2,25 +2,23 @@ package common
 
 import (
 	"bytes"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	cp "github.com/otiai10/copy"
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gotest.tools/v3/assert"
 )
 
 func PrepareMultiFixtures(t *testing.T, name string, deps []string) RepoConfig {
-	newTestDataPath, err := ioutil.TempDir(os.TempDir(), "mutli_fixture")
-	assert.NilError(t, err)
+	newTestDataPath := t.TempDir()
 
 	for _, name := range deps {
 		fixturePath := filepath.Join("testdata", name)
 		newPath := filepath.Join(newTestDataPath, name)
-		err = cp.Copy(fixturePath, newPath)
+		err := cp.Copy(fixturePath, newPath)
 		assert.NilError(t, err)
 
 		err = os.Rename(filepath.Join(newPath, ".gitted"), filepath.Join(newPath, ".git"))
@@ -37,12 +35,12 @@ func FixFixtureGitConfig(t *testing.T, newRepoPath string, testDataPath string) 
 	// Fix remote paths
 	dotGitPath := filepath.Join(newRepoPath, ".git")
 	gitConfigFilePath := filepath.Join(dotGitPath, "config")
-	input, err := ioutil.ReadFile(gitConfigFilePath)
+	input, err := os.ReadFile(gitConfigFilePath)
 	assert.NilError(t, err)
 
-	output := bytes.Replace(input, []byte("$TESTDATA$"), []byte(testDataPath), -1)
+	output := bytes.ReplaceAll(input, []byte("$TESTDATA$"), []byte(testDataPath))
 
-	err = ioutil.WriteFile(gitConfigFilePath, output, 0666)
+	err = os.WriteFile(gitConfigFilePath, output, 0666)
 	assert.NilError(t, err)
 }
 

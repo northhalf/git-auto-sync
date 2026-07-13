@@ -14,9 +14,9 @@ type ConfigV1 struct {
 	Envs  []string `json:"envs"`
 }
 
-func ReadV1() (*ConfigV1, error) {
+func ReadV1() (_ *ConfigV1, err error) {
 	configPath := configdir.LocalConfig("git-auto-sync")
-	err := configdir.MakePath(configPath)
+	err = configdir.MakePath(configPath)
 	if err != nil {
 		return nil, tracerr.Wrap(err)
 	}
@@ -32,7 +32,12 @@ func ReadV1() (*ConfigV1, error) {
 		if err != nil {
 			return nil, tracerr.Wrap(err)
 		}
-		defer fh.Close()
+		defer func() {
+			closeErr := fh.Close()
+			if err == nil && closeErr != nil {
+				err = tracerr.Wrap(closeErr)
+			}
+		}()
 
 		decoder := json.NewDecoder(fh)
 		err = decoder.Decode(&config)
@@ -44,9 +49,9 @@ func ReadV1() (*ConfigV1, error) {
 	return &config, nil
 }
 
-func WriteV1(config *ConfigV1) error {
+func WriteV1(config *ConfigV1) (err error) {
 	configPath := configdir.LocalConfig("git-auto-sync")
-	err := configdir.MakePath(configPath)
+	err = configdir.MakePath(configPath)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -57,7 +62,12 @@ func WriteV1(config *ConfigV1) error {
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
-	defer fh.Close()
+	defer func() {
+		closeErr := fh.Close()
+		if err == nil && closeErr != nil {
+			err = tracerr.Wrap(closeErr)
+		}
+	}()
 
 	encoder := json.NewEncoder(fh)
 	err = encoder.Encode(&config)

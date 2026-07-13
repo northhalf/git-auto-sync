@@ -1,20 +1,19 @@
 package common
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	cp "github.com/otiai10/copy"
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 
 	"gotest.tools/v3/assert"
 )
 
 func PrepareFixture(t *testing.T, name string) RepoConfig {
-	newRepoPath, err := ioutil.TempDir(os.TempDir(), name)
+	newRepoPath, err := os.MkdirTemp(os.TempDir(), name)
 	assert.NilError(t, err)
 
 	fixturePath := filepath.Join("testdata", name)

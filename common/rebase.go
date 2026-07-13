@@ -7,7 +7,7 @@ import (
 	"path"
 
 	"github.com/ztrue/tracerr"
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 )
 
@@ -35,7 +35,7 @@ func rebase(repoConfig RepoConfig) error {
 			}
 			return errRebaseFailed
 		}
-		return tracerr.Wrap(err)
+		return tracerr.Wrap(rebaseErr)
 	}
 
 	return nil

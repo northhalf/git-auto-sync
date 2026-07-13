@@ -1,8 +1,6 @@
 package config
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/kirsle/configdir"
@@ -10,8 +8,7 @@ import (
 )
 
 func setup(t *testing.T, name string) {
-	newConfigDir, err := ioutil.TempDir(os.TempDir(), "config_"+name)
-	assert.NilError(t, err)
+	newConfigDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", newConfigDir)
 	t.Setenv("HOME", newConfigDir)
 

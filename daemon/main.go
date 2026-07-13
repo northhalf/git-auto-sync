@@ -5,9 +5,9 @@ import (
 	"log"
 	"sync"
 
-	"github.com/GitJournal/git-auto-sync/common"
-	cfg "github.com/GitJournal/git-auto-sync/common/config"
 	"github.com/kardianos/service"
+	"github.com/northhalf/git-auto-sync/common"
+	cfg "github.com/northhalf/git-auto-sync/common/config"
 )
 
 type Daemon struct{}

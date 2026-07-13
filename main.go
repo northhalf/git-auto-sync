@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
 
-	"github.com/GitJournal/git-auto-sync/common"
+	"github.com/northhalf/git-auto-sync/common"
 )
 
 var version = "dev"

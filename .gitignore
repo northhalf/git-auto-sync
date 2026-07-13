@@ -1,3 +1,10 @@
-git-auto-sync
-
+# binary files
+bin/
 dist/
+
+# temporary files
+.tmp/
+
+# claude code
+/docs/superpowers/
+.claude/settings.local.json

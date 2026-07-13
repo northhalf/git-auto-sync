@@ -4,19 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"github.com/GitJournal/git-auto-sync/common"
-	cfg "github.com/GitJournal/git-auto-sync/common/config"
-	cli "github.com/urfave/cli/v2"
+	"github.com/northhalf/git-auto-sync/common"
+	cfg "github.com/northhalf/git-auto-sync/common/config"
+	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
-	"golang.org/x/exp/slices"
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 )
 
-var errRepoPathInvalid = errors.New("Not a valid git repo")
+var errRepoPathInvalid = errors.New("not a valid git repo")
 
 func daemonStatus(ctx *cli.Context) error {
 	s, err := common.NewService()
@@ -160,7 +161,7 @@ func daemonRm(ctx *cli.Context) error {
 	}
 
 	if pos == -1 {
-		err = errors.New("Repo Not tracked")
+		err = errors.New("repo not tracked")
 		return tracerr.Errorf("%w - %s", err, repoPath)
 	}
 
@@ -202,9 +203,7 @@ func daemonEnv(ctx *cli.Context) error {
 	envMap := toEnvMap(config.Envs)
 	newMap := toEnvMap(vars)
 
-	for k, v := range newMap {
-		envMap[k] = v
-	}
+	maps.Copy(envMap, newMap)
 
 	config.Envs = toEnvStrings(envMap)
 	err = cfg.Write(config)

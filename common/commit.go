@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ztrue/tracerr"
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 )
 
 func commit(repoConfig RepoConfig) error {

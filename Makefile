@@ -1,12 +1,7 @@
-.PHONY: lint
-	
-lint:
-	golangci-lint run
-
-test:
-	go test ./...
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+INSTALL_DIR= $(MAKEFILE_DIR)/bin
 
 install:
-	go install .
-	cd daemon && go build -o git-auto-sync-daemon .
-	cd daemon && mv git-auto-sync-daemon ${GOPATH}/bin/
+	mkdir -p $(INSTALL_DIR)
+	go build -o $(INSTALL_DIR)/git-auto-sync .
+	cd daemon && go build -o $(INSTALL_DIR)/git-auto-sync-daemon .

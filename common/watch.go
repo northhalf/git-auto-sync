@@ -9,14 +9,14 @@ import (
 
 	"github.com/rjeczalik/notify"
 	"github.com/ztrue/tracerr"
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 )
 
 // FIXME: Replace the logger with returning an error and retrying after 'x' minutes
 
 type RepoConfig struct {
 	RepoPath     string
-	PollInterval time.Duration
+	SyncInterval time.Duration
 	FSLag        time.Duration
 	GitExec      string
 	Env          []string
@@ -39,7 +39,7 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 
 	autoSyncSection := config.Raw.Section("auto-sync")
 
-	pollInterval := 10 * time.Minute
+	syncInterval := 10 * time.Minute
 	if autoSyncSection.Option("syncInterval") != "" {
 		secondsStr := autoSyncSection.Option("syncInterval")
 		seconds, err := strconv.Atoi(secondsStr)
@@ -47,7 +47,7 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 			return RepoConfig{}, tracerr.Wrap(err)
 		}
 
-		pollInterval = time.Duration(seconds) * time.Second
+		syncInterval = time.Duration(seconds) * time.Second
 	}
 
 	gitExec := ""
@@ -62,7 +62,7 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 
 	return RepoConfig{
 		RepoPath:     repoPath,
-		PollInterval: pollInterval,
+		SyncInterval: syncInterval,
 		FSLag:        1 * time.Second,
 		GitExec:      gitExec,
 	}, nil
@@ -78,7 +78,7 @@ func WatchForChanges(cfg RepoConfig) error {
 	}
 
 	notifyFilteredChannel := make(chan bool, 100)
-	pollTicker := time.NewTicker(cfg.PollInterval)
+	syncTicker := time.NewTicker(cfg.SyncInterval)
 
 	// Filtered events
 	go func() {
@@ -109,7 +109,7 @@ func WatchForChanges(cfg RepoConfig) error {
 				}
 				continue
 
-			case <-pollTicker.C:
+			case <-syncTicker.C:
 				err := AutoSync(cfg)
 				if err != nil {
 					log.Fatalln(err)

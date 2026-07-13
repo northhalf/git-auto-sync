@@ -3,7 +3,7 @@ package common
 import (
 	"testing"
 
-	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gotest.tools/v3/assert"
 )
