@@ -8,7 +8,12 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-// No new commits on remote or local
+// @description    Verifies a rebase with no new commits.
+//
+// Test_RebaseNothing verifies that rebasing with no new remote or local commits succeeds and
+// leaves HEAD at the shared commit.
+//
+// @param           t   "test handle used for fixture setup and Git assertions"
 func Test_RebaseNothing(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_nothing", []string{"rebase_parent"})
 
@@ -24,7 +29,12 @@ func Test_RebaseNothing(t *testing.T) {
 	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
 }
 
-// New commits on local
+// @description    Verifies a rebase with local commits.
+//
+// Test_RebaseLocalCommits verifies that rebasing when only the local branch has new commits
+// succeeds and preserves the expected local HEAD commit.
+//
+// @param           t   "test handle used for fixture setup and Git assertions"
 func Test_RebaseLocalCommits(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_local_commits", []string{"rebase_parent"})
 
@@ -40,7 +50,12 @@ func Test_RebaseLocalCommits(t *testing.T) {
 	assert.Equal(t, head.Hash(), plumbing.NewHash("7fc438e0c9cc4f58178a1efe8521e52f0f8ee688"))
 }
 
-// New commits on remote
+// @description    Verifies a rebase with remote commits.
+//
+// Test_RebaseRemoteCommits verifies that rebasing when only the remote branch has new commits
+// succeeds and advances HEAD to the expected remote commit.
+//
+// @param           t   "test handle used for fixture setup and Git assertions"
 func Test_RebaseRemoteCommits(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_remote_commits", []string{"rebase_parent"})
 
@@ -56,7 +71,12 @@ func Test_RebaseRemoteCommits(t *testing.T) {
 	assert.Equal(t, head.Hash(), plumbing.NewHash("ccda8f2e691aa416791a10afc74ccdbd1cb419fe"))
 }
 
-// New commits on both, no conflict
+// @description    Verifies a nonconflicting divergent rebase.
+//
+// Test_RebaseBothCommitsNoConflict verifies that rebasing new remote and local commits without a
+// conflict succeeds and produces a rewritten HEAD distinct from both sides' commits.
+//
+// @param           t   "test handle used for fixture setup and Git assertions"
 func Test_RebaseBothCommitsNoConflict(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_both_commits", []string{"rebase_parent"})
 
@@ -74,7 +94,12 @@ func Test_RebaseBothCommitsNoConflict(t *testing.T) {
 	assert.Check(t, head.Hash() != plumbing.NewHash("7fc438e0c9cc4f58178a1efe8521e52f0f8ee688"))
 }
 
-// New commits on both, some kind of conflict
+// @description    Verifies a conflicting divergent rebase.
+//
+// Test_RebaseBothCommitsConflict verifies that conflicting new remote and local commits return
+// errRebaseFailed and leave HEAD at its pre-rebase commit after the abort.
+//
+// @param           t   "test handle used for fixture setup and Git assertions"
 func Test_RebaseBothCommitsConflict(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_both_commits_conflict", []string{"rebase_parent"})
 

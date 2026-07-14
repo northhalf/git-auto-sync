@@ -5,6 +5,14 @@ import (
 	git "gopkg.in/src-d/go-git.v4"
 )
 
+// @description    Fetches every configured remote.
+//
+// fetch runs Git fetch for every remote configured in the repository, stopping at the first
+// repository or command error.
+//
+// @param           repoConfig  "configuration for the repository to fetch"
+//
+// @return          error       "nil when all remotes are fetched, or the first encountered error"
 func fetch(repoConfig RepoConfig) error {
 	repoPath := repoConfig.RepoPath
 	r, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})

@@ -14,6 +14,10 @@ import (
 
 var version = "dev"
 
+// @description    Runs the command-line application.
+//
+// main builds the command-line application, runs the requested command, and terminates with a
+// logged fatal error when command execution fails.
 func main() {
 	app := &cli.App{
 		Name:                 "git-auto-sync",

@@ -19,6 +19,14 @@ import (
 
 var errRepoPathInvalid = errors.New("not a valid git repo")
 
+// @description    Prints daemon status and repositories.
+//
+// daemonStatus prints the service status and every repository in the daemon configuration,
+// returning an error if either cannot be read.
+//
+// @param           ctx    "CLI context for the daemon status command"
+//
+// @return          error  "nil on success, or an error from the service or configuration"
 func daemonStatus(ctx *cli.Context) error {
 	s, err := common.NewService()
 	if err != nil {
@@ -45,6 +53,11 @@ func daemonStatus(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    daemonList prints each repository stored in the daemon configuration.
+//
+// @param           ctx    "CLI context for the daemon list command"
+//
+// @return          error  "nil on success, or an error reading the configuration"
 func daemonList(ctx *cli.Context) error {
 	config, err := cfg.Read()
 	if err != nil {
@@ -57,6 +70,15 @@ func daemonList(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    Adds a repository to the daemon.
+//
+// daemonAdd validates a repository, adds it to the daemon configuration when absent, writes the
+// configuration, and enables the user service. Enabling may stop a running service before
+// installing or reinstalling and starting it.
+//
+// @param           ctx    "CLI context containing the repository path"
+//
+// @return          error  "nil on success, or an error validating, persisting, or enabling the service"
 func daemonAdd(ctx *cli.Context) error {
 	repoPath := ctx.Args().First()
 	repoPath, err := filepath.Abs(repoPath)
@@ -98,6 +120,16 @@ func daemonAdd(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    Validates a Git worktree path.
+//
+// isValidGitRepo verifies that a caller-provided path belongs to a non-bare Git worktree and walks
+// upward to find the repository root containing a .git directory.
+//
+// @param           repoPath  "caller-provided path to validate as a Git repository or descendant"
+//
+// @return          string    "repository root derived from the caller-provided path"
+//
+// @return          error     "nil on success, or an error for an invalid path or repository"
 func isValidGitRepo(repoPath string) (string, error) {
 	info, err := os.Stat(repoPath)
 	if os.IsNotExist(err) {
@@ -135,6 +167,14 @@ func isValidGitRepo(repoPath string) (string, error) {
 	return repoPath, nil
 }
 
+// @description    Removes a repository from the daemon.
+//
+// daemonRm validates and removes a tracked repository from the daemon configuration, then stops
+// and uninstalls the service when no repositories remain.
+//
+// @param           ctx    "CLI context containing the repository path"
+//
+// @return          error  "nil on success, or an error validating, persisting, or disabling the service"
 func daemonRm(ctx *cli.Context) error {
 	repoPath := ctx.Args().First()
 	repoPath, err := filepath.Abs(repoPath)
@@ -186,6 +226,15 @@ func daemonRm(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    Updates the daemon environment.
+//
+// daemonEnv validates key=value arguments, merges them into the daemon environment configuration,
+// persists the result, and prints all stored entries. Invalid argument syntax terminates the
+// process through the logger.
+//
+// @param           ctx    "CLI context containing environment assignments"
+//
+// @return          error  "nil on success, or an error reading or writing the configuration"
 func daemonEnv(ctx *cli.Context) error {
 	vars := ctx.Args().Slice()
 
@@ -216,10 +265,22 @@ func daemonEnv(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    remove deletes the element at an index by joining the surrounding slices.
+//
+// @param           slice     "string slice to modify"
+//
+// @param           s         "index of the element to remove"
+//
+// @return          []string  "slice without the indexed element"
 func remove(slice []string, s int) []string {
 	return append(slice[:s], slice[s+1:]...)
 }
 
+// @description    toEnvMap parses key=value entries into a map, preserving equals signs in values.
+//
+// @param           envs               "environment entries to parse"
+//
+// @return          map[string]string  "environment values keyed by variable name"
 func toEnvMap(envs []string) map[string]string {
 	m := map[string]string{}
 	for _, e := range envs {
@@ -234,6 +295,11 @@ func toEnvMap(envs []string) map[string]string {
 	return m
 }
 
+// @description    toEnvStrings formats an environment map as key=value entries.
+//
+// @param           m         "environment values keyed by variable name"
+//
+// @return          []string  "formatted environment entries"
 func toEnvStrings(m map[string]string) []string {
 	vals := []string{}
 	for k, v := range m {

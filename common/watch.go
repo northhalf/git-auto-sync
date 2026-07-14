@@ -26,6 +26,16 @@ type AwakeNotifier interface {
 	Start(chan bool) error
 }
 
+// @description    Reads repository synchronization settings.
+//
+// NewRepoConfig reads repository-local auto-sync settings, applies default timing values, and
+// checks that any configured Git executable path exists.
+//
+// @param           repoPath    "path to the repository root"
+//
+// @return          RepoConfig  "resolved repository configuration"
+//
+// @return          error       "nil on success, or an error reading Git configuration or the executable"
 func NewRepoConfig(repoPath string) (RepoConfig, error) {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
@@ -68,6 +78,16 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 	}, nil
 }
 
+// @description    Synchronizes and watches a repository.
+//
+// WatchForChanges performs an initial sync, then watches recursive filesystem events while a
+// goroutine requests further syncs from eligible events, a periodic ticker, and platform wake
+// notifications. Notifier and later sync errors terminate the process through the logger; normal
+// operation loops indefinitely.
+//
+// @param           cfg    "repository configuration and watcher timing values"
+//
+// @return          error  "an error from initial sync, watcher setup, or filesystem event inspection"
 func WatchForChanges(cfg RepoConfig) error {
 	repoPath := cfg.RepoPath
 	var err error

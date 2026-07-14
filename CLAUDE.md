@@ -74,21 +74,28 @@ Platform wake behavior relies on Go filename suffixes: Darwin uses `mac-sleep-no
 
 ## Code style
 
-All functions — especially exported ones — **must** include structured doc comments using the following tag‑based style:
+All functions — especially exported ones — **must** include structured doc comments using the following tag-based style:
 
-- `@description` – a brief, clear explanation of what the function does, including side effects or important behavior.
-- `@param` – for each parameter: name, and a short explanation (e.g., "path to repository root").
-- `@return` – for each return value: name (if any), and a description of what it represents or when it is returned.
+- `@description` – place a brief summary on the tag line. When more context is needed, add a blank comment line and a separate detail paragraph that starts with the function name.
+- `@param` – add one entry for each parameter: its name and a short explanation (for example, `"path to repository root"`).
+- `@return` – add one entry for each return value: its name, when available, and what it represents or when it is returned.
+- Insert a blank `//` comment line between every two `@...` tag lines, including consecutive `@param` and `@return` entries. IDE documentation renderers otherwise join the tags into one paragraph.
+- Keep blank `//` comment lines around the detail paragraph as well.
+- Write detail paragraphs as regular `// text` comments. Do not align continuation lines under `@description`; `gofmt` converts those lines into indented comment text and visually separates them from the tag line.
 
 Example:
 
 ```go
-// @description    AutoSync runs the full sync pipeline: stage and commit local changes,
-//                  fetch all remotes, rebase onto the current upstream branch, then push.
-//                  In case of a rebase conflict, it aborts the rebase, sends a desktop
-//                  notification, and returns errRebaseFailed without pushing.
-// @param           repo   "configuration for the repository to sync"
-// @return          error  nil on success, or an error describing the failure"
-func AutoSync(repo *RepoConfig) error {
+// @description    Synchronizes a Git repository.
+//
+// AutoSync verifies the Git author, commits eligible changes, fetches all remotes, rebases onto
+// the configured upstream branch, and pushes. A rebase conflict aborts the rebase, sends a desktop
+// notification, and stops the pipeline before push.
+//
+// @param           repoConfig  "configuration for the repository to synchronize"
+//
+// @return          error       "nil on success, or an error from a synchronization stage"
+func AutoSync(repoConfig RepoConfig) error {
     // ...
 }
+```

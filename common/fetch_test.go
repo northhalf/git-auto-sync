@@ -12,6 +12,19 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+// @description    Prepares related repository fixtures.
+//
+// PrepareMultiFixtures creates a temporary testdata directory, copies each dependency fixture into
+// it, renames each .gitted directory to .git, prepares the named repository fixture, rewrites its
+// remote paths to the copied dependencies, and returns its configuration.
+//
+// @param           t      "test handle used for temporary directories and fixture assertions"
+//
+// @param           name   "name of the repository fixture to prepare"
+//
+// @param           deps   "names of dependency fixtures to copy into temporary testdata"
+//
+// @return          RepoConfig   "configuration for the prepared repository fixture"
 func PrepareMultiFixtures(t *testing.T, name string, deps []string) RepoConfig {
 	newTestDataPath := t.TempDir()
 
@@ -31,8 +44,17 @@ func PrepareMultiFixtures(t *testing.T, name string, deps []string) RepoConfig {
 	return newRepoConfig
 }
 
+// @description    Rewrites fixture remote paths.
+//
+// FixFixtureGitConfig rewrites every $TESTDATA$ placeholder in a fixture repository's Git config
+// to the temporary testdata path so its remotes use the copied fixtures.
+//
+// @param           t              "test handle used for file-operation assertions"
+//
+// @param           newRepoPath    "path to the prepared repository fixture"
+//
+// @param           testDataPath   "path to the temporary directory containing dependency fixtures"
 func FixFixtureGitConfig(t *testing.T, newRepoPath string, testDataPath string) {
-	// Fix remote paths
 	dotGitPath := filepath.Join(newRepoPath, ".git")
 	gitConfigFilePath := filepath.Join(dotGitPath, "config")
 	input, err := os.ReadFile(gitConfigFilePath)
@@ -44,6 +66,12 @@ func FixFixtureGitConfig(t *testing.T, newRepoPath string, testDataPath string) 
 	assert.NilError(t, err)
 }
 
+// @description    Verifies remote-tracking updates.
+//
+// Test_SimpleFetch verifies that fetching leaves the local HEAD unchanged while updating the
+// origin1/master remote-tracking reference to the dependency fixture's commit.
+//
+// @param           t   "test handle used for fixture setup and Git assertions"
 func Test_SimpleFetch(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
 

@@ -17,14 +17,34 @@ type Service struct {
 
 type emptyDaemon struct{}
 
+// @description    Start satisfies the service interface without starting a daemon process.
+//
+// @param           s      "service instance requesting the start"
+//
+// @return          error  "always nil"
 func (d emptyDaemon) Start(s service.Service) error {
 	return nil
 }
 
+// @description    Stop satisfies the service interface without stopping a daemon process.
+//
+// @param           s      "service instance requesting the stop"
+//
+// @return          error  "always nil"
 func (d emptyDaemon) Stop(s service.Service) error {
 	return nil
 }
 
+// @description    Creates the daemon user service.
+//
+// NewServiceWithDaemon builds the user-service definition for the daemon executable beside the
+// current binary, including platform service options.
+//
+// @param           daemon   "service lifecycle implementation to register"
+//
+// @return          Service  "configured service wrapper"
+//
+// @return          error    "nil on success, or an error resolving the executable or creating the service"
 func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
 	options := make(service.KeyValue)
 	options["Restart"] = "on-success"
@@ -61,10 +81,22 @@ func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
 	return Service{Service: s}, nil
 }
 
+// @description    NewService builds a service handle for CLI management without a live daemon.
+//
+// @return          Service  "configured service wrapper"
+//
+// @return          error    "nil on success, or an error creating the service"
 func NewService() (Service, error) {
 	return NewServiceWithDaemon(emptyDaemon{})
 }
 
+// @description    Installs and starts the daemon service.
+//
+// Enable stops a running daemon service, installs it, and starts it. When installation reports an
+// existing init entry, it attempts an uninstall and reinstall but ignores errors from those
+// recovery operations.
+//
+// @return          error  "nil on completion, or a status, stop, non-recoverable install, or start error"
 func (srv Service) Enable() error {
 	s := srv.Service
 
@@ -110,6 +142,9 @@ func (srv Service) Enable() error {
 	return nil
 }
 
+// @description    Disable stops and uninstalls the daemon user service.
+//
+// @return          error  "nil on success, or an error stopping or uninstalling the service"
 func (srv Service) Disable() error {
 	fmt.Println("Stopping git-auto-sync-daemon")
 	err := srv.Service.Stop()
@@ -126,6 +161,12 @@ func (srv Service) Disable() error {
 	return nil
 }
 
+// @description    Prints the daemon service status.
+//
+// Status queries the daemon service, prints running and stopped states, prints nothing for
+// StatusUnknown, and prints a generic message for unrecognized states.
+//
+// @return          error  "nil after handling the state, or an error querying the service"
 func (srv Service) Status() error {
 	status, err := srv.Service.Status()
 	if err != nil {

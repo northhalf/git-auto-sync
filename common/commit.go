@@ -12,6 +12,15 @@ import (
 	"gopkg.in/src-d/go-git.v4"
 )
 
+// @description    Commits eligible worktree changes.
+//
+// commit filters changed files through ShouldIgnoreFile, stages eligible files, sorts their status
+// lines, and creates a commit with those lines as its message. It returns without committing when
+// no eligible changes exist.
+//
+// @param           repoConfig  "configuration for the repository to commit"
+//
+// @return          error       "nil on success or no eligible changes, or a repository or Git error"
 func commit(repoConfig RepoConfig) error {
 	repoPath := repoConfig.RepoPath
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
@@ -76,6 +85,19 @@ func commit(repoConfig RepoConfig) error {
 	return nil
 }
 
+// @description    Runs a Git subprocess.
+//
+// GitCommand runs the configured Git executable in the repository directory with the resolved
+// environment, captures standard output and standard error, warns about an omitted SSH agent
+// socket, and includes command details in errors.
+//
+// @param           repoConfig   "repository, executable, and environment configuration"
+//
+// @param           args         "arguments to pass to the Git executable"
+//
+// @return          bytes.Buffer "captured standard output, including output from a failed command"
+//
+// @return          error        "nil on success, or an error containing command and captured output details"
 func GitCommand(repoConfig RepoConfig, args []string) (bytes.Buffer, error) {
 	repoPath := repoConfig.RepoPath
 
@@ -105,6 +127,14 @@ func GitCommand(repoConfig RepoConfig, args []string) (bytes.Buffer, error) {
 	return outb, nil
 }
 
+// @description    Builds the Git subprocess environment.
+//
+// toEnvString builds the subprocess environment from configured entries and the current process
+// HOME value.
+//
+// @param           repoConfig  "repository configuration containing explicit environment entries"
+//
+// @return          []string    "environment entries for the Git subprocess"
 func toEnvString(repoConfig RepoConfig) []string {
 	vals := repoConfig.Env
 	vals = append(vals, repoConfig.Env...)
@@ -120,6 +150,13 @@ func toEnvString(repoConfig RepoConfig) []string {
 	return vals
 }
 
+// @description    hasEnvVariable reports whether an environment entry has the requested key.
+//
+// @param           all   "environment entries in key=value form"
+//
+// @param           name  "environment variable name to find"
+//
+// @return          bool  "true when an entry with the requested name exists"
 func hasEnvVariable(all []string, name string) bool {
 	for _, s := range all {
 		parts := strings.Split(s, "=")

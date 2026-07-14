@@ -13,6 +13,14 @@ import (
 
 var errRebaseFailed = errors.New("git rebase failed")
 
+// @description    Rebases onto the configured upstream.
+//
+// rebase rebases the current branch onto its configured upstream. If Git leaves a rebase in
+// progress after an exit-code-one failure, it aborts the rebase and returns errRebaseFailed.
+//
+// @param           repoConfig  "configuration for the repository to rebase"
+//
+// @return          error       "nil on success, errRebaseFailed after an aborted conflict, or another error"
 func rebase(repoConfig RepoConfig) error {
 	repoPath := repoConfig.RepoPath
 	bi, err := fetchBranchInfo(repoPath)
@@ -41,6 +49,16 @@ func rebase(repoConfig RepoConfig) error {
 	return nil
 }
 
+// @description    Checks whether a filesystem path exists.
+//
+// exists reports whether a filesystem path exists and distinguishes absence from other stat
+// errors.
+//
+// @param           name   "filesystem path to inspect"
+//
+// @return          bool   "true when the path exists"
+//
+// @return          error  "nil for existing or absent paths, or the filesystem error"
 func exists(name string) (bool, error) {
 	_, err := os.Stat(name)
 	if err == nil {
@@ -58,6 +76,16 @@ type branchInfo struct {
 	UpstreamBranch string
 }
 
+// @description    Reads current branch and upstream details.
+//
+// fetchBranchInfo reads the current branch and its configured upstream remote and branch,
+// returning only the current branch when no tracking entry exists.
+//
+// @param           repoPath    "path to the repository root"
+//
+// @return          branchInfo  "current branch and any configured upstream details"
+//
+// @return          error       "nil on success, or an error reading the repository, config, or HEAD"
 func fetchBranchInfo(repoPath string) (branchInfo, error) {
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
@@ -88,6 +116,13 @@ func fetchBranchInfo(repoPath string) (branchInfo, error) {
 	}, nil
 }
 
+// @description    isRebasing checks for Git's rebase-apply and rebase-merge state directories.
+//
+// @param           repoPath  "path to the repository root"
+//
+// @return          bool      "true when either rebase state directory exists"
+//
+// @return          error     "nil on success, or an error inspecting a state directory"
 func isRebasing(repoPath string) (bool, error) {
 	ra, err := exists(path.Join(repoPath, ".git", "rebase-apply"))
 	if err != nil {

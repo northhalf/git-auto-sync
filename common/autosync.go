@@ -8,6 +8,15 @@ import (
 )
 
 // FIXME: Add logs for when we commit, pull, and push
+// @description    Synchronizes a Git repository.
+//
+// AutoSync verifies the Git author, commits eligible worktree changes, fetches remotes, rebases
+// onto the configured upstream, and pushes. A rebase conflict triggers a desktop alert and stops
+// the pipeline before push.
+//
+// @param           repoConfig  "configuration for the repository to synchronize"
+//
+// @return          error       "nil on success, or an error from any synchronization stage or alert"
 func AutoSync(repoConfig RepoConfig) error {
 	var err error
 	err = ensureGitAuthor(repoConfig)

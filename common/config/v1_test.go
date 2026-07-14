@@ -7,6 +7,14 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+// @description    Prepares an isolated configuration directory.
+//
+// setup creates a temporary configuration directory, points XDG_CONFIG_HOME and HOME at it for the
+// test, and refreshes configdir's cached paths.
+//
+// @param           t      "test handle used for the temporary directory and environment changes"
+//
+// @param           name   "descriptive setup name retained for test-call compatibility"
 func setup(t *testing.T, name string) {
 	newConfigDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", newConfigDir)
@@ -15,6 +23,12 @@ func setup(t *testing.T, name string) {
 	configdir.Refresh()
 }
 
+// @description    Verifies version-one configuration round trips.
+//
+// Test_SimpleWriteReadV1 verifies that writing a V1 configuration with repository and environment
+// entries to an isolated config directory reads back an equal value.
+//
+// @param           t   "test handle used for isolated configuration setup and assertions"
 func Test_SimpleWriteReadV1(t *testing.T) {
 	setup(t, "SimpleWriteRead")
 
@@ -31,6 +45,12 @@ func Test_SimpleWriteReadV1(t *testing.T) {
 	assert.DeepEqual(t, c, c2)
 }
 
+// @description    Verifies reads without a configuration file.
+//
+// Test_ReadEmptyV1 verifies that reading from an isolated configuration directory with no V1 file
+// succeeds and returns a configuration with no repositories.
+//
+// @param           t   "test handle used for isolated configuration setup and assertions"
 func Test_ReadEmptyV1(t *testing.T) {
 	setup(t, "ReadEmpty")
 

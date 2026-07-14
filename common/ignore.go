@@ -11,6 +11,18 @@ import (
 	"gopkg.in/src-d/go-git.v4/plumbing/format/gitignore"
 )
 
+// @description    Determines whether a file should be ignored.
+//
+// ShouldIgnoreFile reports whether a path is an editor temporary file, Git metadata, an empty
+// file, or matched by Git ignore and exclude rules.
+//
+// @param           repoPath  "path to the repository root"
+//
+// @param           filePath  "absolute or repository-relative path within repoPath to inspect"
+//
+// @return          bool      "true when the file should be excluded from watching and commits"
+//
+// @return          error     "nil on success, or an error while inspecting the file or Git rules"
 func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 	if !filepath.IsAbs(filePath) {
 		filePath = path.Join(repoPath, filePath)
@@ -41,6 +53,17 @@ func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 	return isFileIgnoredByGit(repoPath, filePath)
 }
 
+// @description    Matches a file against Git ignore rules.
+//
+// isFileIgnoredByGit checks a path against repository ignore patterns and worktree exclude rules.
+//
+// @param           repoPath  "path to the repository root"
+//
+// @param           filePath  "path to match against Git ignore rules"
+//
+// @return          bool      "true when a Git ignore or exclude rule matches the path"
+//
+// @return          error     "nil on success, or an error opening the repository or reading rules"
 func isFileIgnoredByGit(repoPath string, filePath string) (bool, error) {
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
@@ -63,6 +86,16 @@ func isFileIgnoredByGit(repoPath string, filePath string) (bool, error) {
 	return m.Match([]string{filePath}, false), err
 }
 
+// @description    Checks whether an existing file is empty.
+//
+// isEmptyFile reports whether an existing path has zero bytes and treats a missing path as non-
+// empty so deletion events remain eligible.
+//
+// @param           filePath  "filesystem path to inspect"
+//
+// @return          bool      "true when the existing path has zero bytes"
+//
+// @return          error     "nil for existing or missing paths, or the filesystem error"
 func isEmptyFile(filePath string) (bool, error) {
 	stat, err := os.Stat(filePath)
 

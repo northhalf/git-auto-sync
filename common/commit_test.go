@@ -12,6 +12,16 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+// @description    Prepares a repository test fixture.
+//
+// PrepareFixture creates a temporary repository, copies the named fixture into it, renames the
+// fixture's .gitted directory to .git, and returns its repository configuration.
+//
+// @param           t      "test handle used to fail on fixture preparation errors"
+//
+// @param           name   "name of the fixture directory under testdata"
+//
+// @return          RepoConfig   "configuration for the copied temporary repository"
 func PrepareFixture(t *testing.T, name string) RepoConfig {
 	newRepoPath, err := os.MkdirTemp(os.TempDir(), name)
 	assert.NilError(t, err)
@@ -29,6 +39,12 @@ func PrepareFixture(t *testing.T, name string) RepoConfig {
 	return repoConfig
 }
 
+// @description    Verifies that unchanged fixtures create no commits.
+//
+// Test_NoChanges verifies that committing an unchanged fixture succeeds without changing the
+// repository's HEAD commit.
+//
+// @param           t   "test handle used for fixture setup and assertions"
 func Test_NoChanges(t *testing.T) {
 	repoConfig := PrepareFixture(t, "no_changes")
 
@@ -44,6 +60,18 @@ func Test_NoChanges(t *testing.T) {
 	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
 }
 
+// @description    Checks the repository HEAD commit.
+//
+// HasHeadCommit opens a Git repository and asserts that HEAD is a new commit whose parent has the
+// expected hash and whose message matches the expected text.
+//
+// @param           t          "test handle used for Git-operation and commit assertions"
+//
+// @param           repoPath   "path to the repository under test"
+//
+// @param           hash       "expected hash of the HEAD commit's parent"
+//
+// @param           msg        "expected message of the HEAD commit"
 func HasHeadCommit(t *testing.T, repoPath string, hash string, msg string) {
 	r, err := git.PlainOpen(repoPath)
 	assert.NilError(t, err)
@@ -62,6 +90,12 @@ func HasHeadCommit(t *testing.T, repoPath string, hash string, msg string) {
 	assert.Equal(t, commit.Message, msg)
 }
 
+// @description    Verifies commits for untracked files.
+//
+// Test_NewFile verifies that committing an untracked file creates a new HEAD commit with the
+// original HEAD as its parent and the untracked-file status as its message.
+//
+// @param           t   "test handle used for fixture setup and assertions"
 func Test_NewFile(t *testing.T) {
 	repoConfig := PrepareFixture(t, "new_file")
 
@@ -71,6 +105,12 @@ func Test_NewFile(t *testing.T) {
 	HasHeadCommit(t, repoConfig.RepoPath, "28cc969d97ddb7640f5e1428bbc8f2947d1ffd57", "?? 2.md\n")
 }
 
+// @description    Verifies commits for a modified file.
+//
+// Test_OneFileChange verifies that committing one modified file creates a new HEAD commit with the
+// original HEAD as its parent and the modified-file status as its message.
+//
+// @param           t   "test handle used for fixture setup and assertions"
 func Test_OneFileChange(t *testing.T) {
 	repoConfig := PrepareFixture(t, "one_file_change")
 
@@ -80,6 +120,12 @@ func Test_OneFileChange(t *testing.T) {
 	HasHeadCommit(t, repoConfig.RepoPath, "28cc969d97ddb7640f5e1428bbc8f2947d1ffd57", " M 1.md\n")
 }
 
+// @description    Verifies that Vim swap files are ignored.
+//
+// Test_VimSwapFile verifies that committing when the only working-tree change is a Vim swap file
+// succeeds without changing the repository's HEAD commit.
+//
+// @param           t   "test handle used for fixture setup and assertions"
 func Test_VimSwapFile(t *testing.T) {
 	repoConfig := PrepareFixture(t, "vim_swap_file")
 
@@ -95,6 +141,12 @@ func Test_VimSwapFile(t *testing.T) {
 	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
 }
 
+// @description    Verifies commits for multiple file changes.
+//
+// Test_MultipleFileChange verifies that committing deleted, modified, and untracked files creates
+// a new HEAD commit with the expected parent and multiline status message.
+//
+// @param           t   "test handle used for fixture setup and assertions"
 func Test_MultipleFileChange(t *testing.T) {
 	repoConfig := PrepareFixture(t, "multiple_file_change")
 
