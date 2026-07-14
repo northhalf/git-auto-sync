@@ -4,18 +4,27 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/kardianos/service"
 	"github.com/northhalf/git-auto-sync/common"
 	cfg "github.com/northhalf/git-auto-sync/common/config"
 	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
 	"gopkg.in/src-d/go-git.v4"
 )
+
+// cliDaemon satisfies the service interface for CLI service management without starting a process.
+type cliDaemon struct{}
+
+// Start satisfies the service interface without starting a daemon process.
+func (cliDaemon) Start(service.Service) error { return nil }
+
+// Stop satisfies the service interface without stopping a daemon process.
+func (cliDaemon) Stop(service.Service) error { return nil }
 
 var errRepoPathInvalid = errors.New("not a valid git repo")
 
@@ -28,7 +37,7 @@ var errRepoPathInvalid = errors.New("not a valid git repo")
 //
 // @return          error  "nil on success, or an error from the service or configuration"
 func daemonStatus(ctx *cli.Context) error {
-	s, err := common.NewService()
+	s, err := common.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -107,7 +116,7 @@ func daemonAdd(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	s, err := common.NewService()
+	s, err := common.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -205,14 +214,14 @@ func daemonRm(ctx *cli.Context) error {
 		return tracerr.Errorf("%w - %s", err, repoPath)
 	}
 
-	config.Repos = remove(config.Repos, pos)
+	config.Repos = append(config.Repos[:pos], config.Repos[pos+1:]...)
 	err = cfg.Write(config)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
 	if len(config.Repos) == 0 {
-		s, err := common.NewService()
+		s, err := common.NewServiceWithDaemon(cliDaemon{})
 		if err != nil {
 			return tracerr.Wrap(err)
 		}
@@ -249,12 +258,20 @@ func daemonEnv(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	envMap := toEnvMap(config.Envs)
-	newMap := toEnvMap(vars)
+	envMap := make(map[string]string, len(config.Envs)+len(vars))
+	for _, e := range config.Envs {
+		k, v, _ := strings.Cut(e, "=")
+		envMap[k] = v
+	}
+	for _, v := range vars {
+		k, val, _ := strings.Cut(v, "=")
+		envMap[k] = val
+	}
 
-	maps.Copy(envMap, newMap)
-
-	config.Envs = toEnvStrings(envMap)
+	config.Envs = make([]string, 0, len(envMap))
+	for k, v := range envMap {
+		config.Envs = append(config.Envs, k+"="+v)
+	}
 	err = cfg.Write(config)
 	if err != nil {
 		return tracerr.Wrap(err)
@@ -263,49 +280,4 @@ func daemonEnv(ctx *cli.Context) error {
 	fmt.Println(strings.Join(config.Envs, "\n"))
 
 	return nil
-}
-
-// @description    remove deletes the element at an index by joining the surrounding slices.
-//
-// @param           slice     "string slice to modify"
-//
-// @param           s         "index of the element to remove"
-//
-// @return          []string  "slice without the indexed element"
-func remove(slice []string, s int) []string {
-	return append(slice[:s], slice[s+1:]...)
-}
-
-// @description    toEnvMap parses key=value entries into a map, preserving equals signs in values.
-//
-// @param           envs               "environment entries to parse"
-//
-// @return          map[string]string  "environment values keyed by variable name"
-func toEnvMap(envs []string) map[string]string {
-	m := map[string]string{}
-	for _, e := range envs {
-		parts := strings.Split(e, "=")
-		if len(parts) > 1 {
-			m[parts[0]] = strings.Join(parts[1:], "=")
-		} else {
-			m[e] = ""
-		}
-	}
-
-	return m
-}
-
-// @description    toEnvStrings formats an environment map as key=value entries.
-//
-// @param           m         "environment values keyed by variable name"
-//
-// @return          []string  "formatted environment entries"
-func toEnvStrings(m map[string]string) []string {
-	vals := []string{}
-	for k, v := range m {
-		x := fmt.Sprintf("%s=%s", k, v)
-		vals = append(vals, x)
-	}
-
-	return vals
 }

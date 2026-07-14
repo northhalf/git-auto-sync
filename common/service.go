@@ -15,26 +15,6 @@ type Service struct {
 	Service service.Service
 }
 
-type emptyDaemon struct{}
-
-// @description    Start satisfies the service interface without starting a daemon process.
-//
-// @param           s      "service instance requesting the start"
-//
-// @return          error  "always nil"
-func (d emptyDaemon) Start(s service.Service) error {
-	return nil
-}
-
-// @description    Stop satisfies the service interface without stopping a daemon process.
-//
-// @param           s      "service instance requesting the stop"
-//
-// @return          error  "always nil"
-func (d emptyDaemon) Stop(s service.Service) error {
-	return nil
-}
-
 // @description    Creates the daemon user service.
 //
 // NewServiceWithDaemon builds the user-service definition for the daemon executable beside the
@@ -79,15 +59,6 @@ func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
 	}
 
 	return Service{Service: s}, nil
-}
-
-// @description    NewService builds a service handle for CLI management without a live daemon.
-//
-// @return          Service  "configured service wrapper"
-//
-// @return          error    "nil on success, or an error creating the service"
-func NewService() (Service, error) {
-	return NewServiceWithDaemon(emptyDaemon{})
 }
 
 // @description    Installs and starts the daemon service.

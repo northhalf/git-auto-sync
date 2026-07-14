@@ -3,7 +3,6 @@ package config
 import (
 	"testing"
 
-	"github.com/kirsle/configdir"
 	"gotest.tools/v3/assert"
 )
 
@@ -19,8 +18,6 @@ func setup(t *testing.T, name string) {
 	newConfigDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", newConfigDir)
 	t.Setenv("HOME", newConfigDir)
-
-	configdir.Refresh()
 }
 
 // @description    Verifies version-one configuration round trips.

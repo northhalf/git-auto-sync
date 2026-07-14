@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kirsle/configdir"
 	"github.com/ztrue/tracerr"
 )
 
@@ -24,8 +23,13 @@ type ConfigV1 struct {
 //
 // @return          err        "nil on success, or an error creating, opening, decoding, or closing the file"
 func ReadV1() (_ *ConfigV1, err error) {
-	configPath := configdir.LocalConfig("git-auto-sync")
-	err = configdir.MakePath(configPath)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, tracerr.Wrap(err)
+	}
+
+	configPath := filepath.Join(configDir, "git-auto-sync")
+	err = os.MkdirAll(configPath, 0o700)
 	if err != nil {
 		return nil, tracerr.Wrap(err)
 	}
@@ -67,8 +71,13 @@ func ReadV1() (_ *ConfigV1, err error) {
 //
 // @return          err     "nil on success, or an error creating, encoding, or closing the file"
 func WriteV1(config *ConfigV1) (err error) {
-	configPath := configdir.LocalConfig("git-auto-sync")
-	err = configdir.MakePath(configPath)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	configPath := filepath.Join(configDir, "git-auto-sync")
+	err = os.MkdirAll(configPath, 0o700)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}

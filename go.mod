@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/gen2brain/beeep v0.11.2
 	github.com/kardianos/service v1.3.0
-	github.com/kirsle/configdir v0.0.0-20170128060238-e45d2f54772f
 	github.com/otiai10/copy v1.14.1
 	github.com/prashantgupta24/mac-sleep-notifier v1.0.1
 	github.com/rjeczalik/notify v0.9.3

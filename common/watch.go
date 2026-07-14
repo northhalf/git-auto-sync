@@ -115,13 +115,7 @@ func WatchForChanges(cfg RepoConfig) error {
 		for {
 			select {
 			case <-notifyFilteredChannel:
-				// Wait 1 second
-				timer1 := time.NewTimer(cfg.FSLag)
-				done := make(chan bool)
-				go func() {
-					<-timer1.C
-					done <- true
-				}()
+				time.Sleep(cfg.FSLag)
 
 				err := AutoSync(cfg)
 				if err != nil {
