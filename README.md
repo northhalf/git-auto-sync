@@ -1,67 +1,92 @@
-# Git Auto Sync
+<div align="center">
+  <div style="width:200px">
+    <a href="https://github.com/northhalf/git-auto-sync">
+      <img src="assets/icon.webp" alt="Git Auto Sync" width="200">
+    </a>
+  </div>
 
-GitAutoSync is a simple command line program to automatically commit changes
-to your git repo, and always keep that repo up to date. This way you can use any editor with your text files, and never need to worry about
-comitting and remembering to push and pull changes.
+<h1>Git Auto Sync</h1>
 
-## Installation
+![Status](https://img.shields.io/badge/status-active-brightgreen) ![Stage](https://img.shields.io/badge/stage-beta-blue) ![Build Status](https://github.com/northhalf/git-auto-sync/actions/workflows/ci.yml/badge.svg) ![Release](https://img.shields.io/github/v/release/northhalf/git-auto-sync) ![Downloads](https://img.shields.io/github/downloads/northhalf/git-auto-sync/total) ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-* OSX - `brew install GitJournal/tap/git-auto-sync`
-* Linux -
-  - Ubuntu/Debian -
+<p align="center">English | <a href="./README_zh.md">中文</a></p>
 
-    ```bash
-    sudo echo "deb [trusted=yes] https://apt.fury.io/vhanda/ /" | sudo tee /etc/apt/sources.list.d/git-auto-sync.list
-    sudo apt-get update
-    sudo apt-get install -y git-auto-sync
-    ```
-  - Fedora/RPM -
+<h5>A lightweight command-line tool to automatically commit and sync Git repositories.</h5>
 
-    ```bash
-    sudo echo -e "[git-auto-sync]\nname=Git-Auto-Sync\nbaseurl=https://yum.fury.io/vhanda/\nenabled=1\ngpgcheck=0" | sudo tee /etc/yum.repos.d/git-auto-sync.repo
-    sudo yum update
-    sudo yum install -y git-auto-sync
-    ```
-  - Arch Linux - Please write an AUR package and open a PR for this. You're an Arch User. You got this.
-  - Other - Download the [latest release](https://github.com/GitJournal/git-auto-sync/releases/latest)
-* Windows - Download the [latest release](https://github.com/GitJournal/git-auto-sync/releases/latest)
+Git Auto Sync is a modified version of <a href="https://github.com/GitJournal/git-auto-sync"><b>GitJournal/git-auto-sync</b></a>, focused on fixing bugs and improving functionality.
 
-## How to use?
+</div>
 
-GitAutoSync comes with a manual and daemon mode. It's recommended to start with the manual
-mode to ensure authentication is working correctly. It internally just calls the `git` executable
-so, if that works, `git-auto-sync` should just work.
+## Quick Start
 
-You can test it out by running `git-auto-sync sync` to commit, pull, rebase and push any changes.
-If there are no changes, it will just attempt to pull, rebase and push.
+### Prerequisites
 
-Once you're satisfied that `git-auto-sync` is working for you. You can run `git-auto-sync daemon add <repoPath>` to start a background daemon which will continously monitor that repo for any changes
-in the file system and accordingly sync the changes.
+- Go 1.25 or newer
+- Git
+- A configured Git identity (`user.name` and `user.email`) for commits
 
-This daemon will be automatically started as a system process.
+### Build
 
-You can check if it is running `git-auto-sync daemon status`
+```bash
+git clone https://github.com/northhalf/git-auto-sync.git
+cd git-auto-sync
+make
+```
 
-### Background Daemon
+Both `git-auto-sync` and `git-auto-sync-daemon` are built into `./bin`.
 
-The background daemon will be started / stopped automatically if there are any repos to watch in `git-auto-sync daemon ls`.
-This process will monitor the filesystem, poll every 10 minutes, and additionally try to sync on resuming from a suspend. The latter
-two are done to pick up changes from the remote.
+### Manual sync
 
-### Merge Conflicts
+Run inside any Git repository:
 
-GitAutoSync current only supports rebases, and doesn't yet attempt to do a merge. In the case of a
-rebase conflict, it will abort and stop syncing that repo. It will send a system notification
-to inform you of the conflict.
+```bash
+/path/to/bin/git-auto-sync sync
+```
 
-### Ignored Files
+This commits eligible changes, fetches all remotes, rebases onto the configured upstream branch, and pushes.
 
-It currently ignores all hidden files, files ignored by git, and additional temporary swap files
-created by vim, emacs and similar editors.
+### Background daemon
 
-## Similar Projects
+Register a repository for continuous monitoring:
 
-- [Obsidian Git](https://github.com/denolehov/obsidian-git)
-- [VS Code GitDoc](https://marketplace.visualstudio.com/items?itemName=vsls-contrib.gitdoc)
-- [Git Annex](https://git-annex.branchable.com/)
-- [Git Sync](https://github.com/simonthum/git-sync)
+```bash
+/path/to/bin/git-auto-sync daemon add /path/to/repo
+```
+
+Check status:
+
+```bash
+/path/to/bin/git-auto-sync daemon status
+```
+
+The daemon watches the filesystem, polls every configured interval, and syncs automatically.
+
+## Usage
+
+Git Auto Sync provides two modes:
+
+- **Manual**: `git-auto-sync sync` runs the sync pipeline once.
+- **Daemon**: `git-auto-sync daemon add <repo>` starts a background service that monitors the repository.
+
+Run `git-auto-sync --help` or `git-auto-sync daemon --help` for all commands.
+
+### Repository configuration
+
+Per-repository settings live in the Git config section `[auto-sync]`:
+
+```bash
+git config --local auto-sync.syncInterval 300   # seconds, default 600
+git config --local auto-sync.exec /path/to/git  # optional custom git executable
+```
+
+### Merge conflicts
+
+Git Auto Sync uses rebase, not merge. If a rebase conflict occurs, it aborts the rebase, sends a desktop notification, and stops syncing that repository until the conflict is resolved.
+
+### Ignored files
+
+Hidden files, files ignored by Git, and editor swap/backup files (e.g., Vim, Emacs) are excluded from commits and filesystem monitoring.
+
+## License
+
+Apache-2.0
