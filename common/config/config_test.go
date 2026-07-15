@@ -14,7 +14,7 @@ import (
 // @param           t      "test handle used for the temporary directory and environment changes"
 //
 // @param           name   "descriptive setup name retained for test-call compatibility"
-func setup(t *testing.T, name string) {
+func setup(t *testing.T, _ string) {
 	newConfigDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", newConfigDir)
 	t.Setenv("HOME", newConfigDir)
@@ -29,14 +29,14 @@ func setup(t *testing.T, name string) {
 func Test_SimpleWriteReadV1(t *testing.T) {
 	setup(t, "SimpleWriteRead")
 
-	c := &ConfigV1{
+	c := &Config{
 		Repos: []string{"/home/xyz/hello"},
 		Envs:  []string{"SSH_AUTH_SOCK=/private/tmp/com.apple.launchd.74ZznY1v1F/Listeners"},
 	}
-	err := WriteV1(c)
+	err := Write(c)
 	assert.NilError(t, err)
 
-	c2, err := ReadV1()
+	c2, err := Read()
 	assert.NilError(t, err)
 
 	assert.DeepEqual(t, c, c2)
@@ -51,7 +51,7 @@ func Test_SimpleWriteReadV1(t *testing.T) {
 func Test_ReadEmptyV1(t *testing.T) {
 	setup(t, "ReadEmpty")
 
-	c, err := ReadV1()
+	c, err := Read()
 	assert.NilError(t, err)
 	assert.Assert(t, len(c.Repos) == 0)
 }
