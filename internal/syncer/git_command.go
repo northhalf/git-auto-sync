@@ -16,7 +16,10 @@ import (
 //
 // gitCommand runs the configured Git executable in the repository directory with the resolved
 // environment, captures standard output and standard error, warns about an omitted SSH agent
-// socket, and includes command details in errors.
+// socket, and includes command details in returned errors. Structured log attributes identify the
+// operation without separately exposing environment values, command output, or remote URLs.
+//
+// @param           logger       "repository-scoped logger"
 //
 // @param           repoConfig   "repository, executable, and environment configuration"
 //
@@ -25,8 +28,12 @@ import (
 // @return          bytes.Buffer "captured standard output, including output from a failed command"
 //
 // @return          error        "nil on success, or an error containing command and captured output details"
-func gitCommand(repoConfig config.RepoConfig, args []string) (bytes.Buffer, error) {
-	repoPath := repoConfig.RepoPath
+func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string) (bytes.Buffer, error) {
+	operation := "unknown"
+	if len(args) > 0 {
+		operation = args[0]
+	}
+	logger.Debug("starting git command", "operation", operation)
 
 	var outb, errb bytes.Buffer
 
@@ -36,7 +43,7 @@ func gitCommand(repoConfig config.RepoConfig, args []string) (bytes.Buffer, erro
 	}
 
 	statusCmd := exec.Command(cmd, args...)
-	statusCmd.Dir = repoPath
+	statusCmd.Dir = repoConfig.RepoPath
 	statusCmd.Stdout = &outb
 	statusCmd.Stderr = &errb
 	statusCmd.Env = toEnvString(repoConfig)
@@ -44,14 +51,15 @@ func gitCommand(repoConfig config.RepoConfig, args []string) (bytes.Buffer, erro
 
 	if hasEnvVariable(os.Environ(), "SSH_AUTH_SOCK") && !hasEnvVariable(repoConfig.Env, "SSH_AUTH_SOCK") {
 		fmt.Println("WARNING: SSH_AUTH_SOCK env variable isn't being passed")
-		slog.Warn("SSH_AUTH_SOCK env variable isn't being passed")
+		logger.Warn("SSH_AUTH_SOCK env variable isn't being passed")
 	}
 
 	if err != nil {
 		fullCmd := cmd + " " + strings.Join(args, " ")
-		err := tracerr.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, statusCmd.Env, outb.String(), errb.String())
-		return outb, err
+		return outb, tracerr.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, statusCmd.Env, outb.String(), errb.String())
 	}
+
+	logger.Debug("git command completed", "operation", operation)
 	return outb, nil
 }
 

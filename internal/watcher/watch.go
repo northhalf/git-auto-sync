@@ -23,18 +23,19 @@ type AwakeNotifier interface {
 //
 // WatchForChanges performs an initial sync, then watches recursive filesystem events while a
 // goroutine requests further syncs from eligible events, a periodic ticker, and platform wake
-// notifications. Notifier and later sync errors are logged before terminating the process; normal
-// operation loops indefinitely.
+// notifications. Sync errors are already logged by the failing synchronization stage and are not
+// duplicated here. Normal operation loops indefinitely.
 //
-// @param           cfg    "repository configuration and watcher timing values"
+// @param           logger  "repository-scoped logger"
 //
-// @return          error  "an error from initial sync, watcher setup, or filesystem event inspection"
-func WatchForChanges(cfg config.RepoConfig) error {
-	repoPath := cfg.RepoPath
-	var err error
+// @param           cfg     "repository configuration and watcher timing values"
+//
+// @return          error   "an error from initial sync, watcher setup, or filesystem event inspection"
+func WatchForChanges(logger *slog.Logger, cfg config.RepoConfig) error {
+	logger.Debug("starting watcher")
 
-	err = syncer.AutoSync(cfg)
-	if err != nil {
+	repoPath := cfg.RepoPath
+	if err := syncer.AutoSync(logger, cfg); err != nil {
 		return tracerr.Wrap(err)
 	}
 
@@ -45,13 +46,13 @@ func WatchForChanges(cfg config.RepoConfig) error {
 	go func() {
 		notifier, err := NewAwakeNotifier()
 		if err != nil {
-			slog.Error("watcher error", "error", err)
+			logger.Error("watcher failed", "operation", "create awake notifier", "error", err)
 			os.Exit(1)
 		}
 
 		err = notifier.Start(notifyFilteredChannel)
 		if err != nil {
-			slog.Error("watcher error", "error", err)
+			logger.Error("watcher failed", "operation", "start awake notifier", "error", err)
 			os.Exit(1)
 		}
 
@@ -60,41 +61,38 @@ func WatchForChanges(cfg config.RepoConfig) error {
 			case <-notifyFilteredChannel:
 				time.Sleep(cfg.FSLag)
 
-				err := syncer.AutoSync(cfg)
-				if err != nil {
-					slog.Error("sync after filesystem event failed", "repo", cfg.RepoPath, "error", err)
+				if err := syncer.AutoSync(logger, cfg); err != nil {
 					os.Exit(1)
 				}
 				continue
 
 			case <-syncTicker.C:
-				err := syncer.AutoSync(cfg)
-				if err != nil {
-					slog.Error("sync after ticker failed", "repo", cfg.RepoPath, "error", err)
+				if err := syncer.AutoSync(logger, cfg); err != nil {
 					os.Exit(1)
 				}
 			}
 		}
 	}()
 
-	//
-	// Watch for FS events
-	//
+	// Watch for FS events.
 	notifyChannel := make(chan notify.EventInfo, 100)
 
-	err = notify.Watch(filepath.Join(repoPath, "..."), notifyChannel, notify.Write, notify.Rename, notify.Remove, notify.Create)
-	if err != nil {
+	if err := notify.Watch(filepath.Join(repoPath, "..."), notifyChannel, notify.Write, notify.Rename, notify.Remove, notify.Create); err != nil {
+		logger.Error("watcher failed", "operation", "watch filesystem", "error", err)
 		return tracerr.Wrap(err)
 	}
 	defer notify.Stop(notifyChannel)
 
+	logger.Info("watcher started")
 	for {
 		ei := <-notifyChannel
 		ignore, err := syncer.ShouldIgnoreFile(repoPath, ei.Path())
 		if err != nil {
+			logger.Error("watcher failed", "operation", "inspect filesystem event", "path", ei.Path(), "error", err)
 			return tracerr.Wrap(err)
 		}
 		if ignore {
+			logger.Debug("filesystem event skipped", "path", ei.Path())
 			continue
 		}
 

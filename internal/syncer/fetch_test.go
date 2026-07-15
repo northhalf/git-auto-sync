@@ -3,6 +3,7 @@ package syncer
 import (
 	"bytes"
 	"github.com/northhalf/git-auto-sync/internal/config"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,7 +77,7 @@ func FixFixtureGitConfig(t *testing.T, newRepoPath string, testDataPath string) 
 func Test_SimpleFetch(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
 
-	err := fetch(repoConfig)
+	err := fetch(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)

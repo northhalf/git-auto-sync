@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -16,6 +17,8 @@ const (
 	cliLogFilename    = "git-auto-sync.log"
 	daemonLogFilename = "git-auto-sync-daemon.log"
 )
+
+var projectSourceRoot = sourceRoot()
 
 // @description    Initializes the shared CLI logger.
 //
@@ -137,7 +140,7 @@ func setupLoggerWithPathAndOutput(debug bool, logPath string, debugOutput io.Wri
 		LocalTime:  true,
 	}
 
-	handlerOptions := &slog.HandlerOptions{Level: slog.LevelDebug}
+	handlerOptions := newHandlerOptions(debug)
 	handlers := []slog.Handler{slog.NewTextHandler(fileWriter, handlerOptions)}
 	if debug {
 		handlers = append(handlers, slog.NewTextHandler(debugOutput, handlerOptions))
@@ -166,9 +169,59 @@ func fallbackLoggerWithOutput(debug bool, err error, debugOutput io.Writer) (*sl
 	if debug {
 		output = debugOutput
 	}
-	logger := slog.New(slog.NewTextHandler(output, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(slog.NewTextHandler(output, newHandlerOptions(debug)))
 	slog.SetDefault(logger)
 	return logger, nil
+}
+
+// @description    Returns a logger with the repository path attached to every record.
+//
+// @param           repoPath  "path to the repository root"
+//
+// @return          *slog.Logger  "default logger derived with the repository attribute"
+func WithRepo(repoPath string) *slog.Logger {
+	return slog.Default().With("repo", repoPath)
+}
+
+// @description    Builds text-handler options shared by file, console, and fallback logging.
+//
+// @param           debug  "when true, include the source file and line"
+//
+// @return          *slog.HandlerOptions  "handler options with DEBUG level and shortened timestamps"
+func newHandlerOptions(debug bool) *slog.HandlerOptions {
+	return &slog.HandlerOptions{
+		Level:     slog.LevelDebug,
+		AddSource: debug,
+		ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
+			switch attr.Key {
+			case slog.TimeKey:
+				return slog.String(slog.TimeKey, attr.Value.Time().Format("2006-01-02T15:04:05"))
+			case slog.SourceKey:
+				source, ok := attr.Value.Any().(*slog.Source)
+				if !ok {
+					return attr
+				}
+				file, err := filepath.Rel(projectSourceRoot, source.File)
+				if err != nil || strings.HasPrefix(file, "..") {
+					file = filepath.Base(source.File)
+				}
+				return slog.String(slog.SourceKey, filepath.ToSlash(file))
+			default:
+				return attr
+			}
+		},
+	}
+}
+
+// @description    Returns the source-tree root used to shorten debug source paths.
+//
+// @return          string  "project root derived from this package's source file"
+func sourceRoot() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "."
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
 // @description    Returns a named default log file path for the current platform.

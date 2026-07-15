@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"github.com/northhalf/git-auto-sync/internal/config"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,7 +50,7 @@ func PrepareFixture(t *testing.T, name string) config.RepoConfig {
 func Test_NoChanges(t *testing.T) {
 	repoConfig := PrepareFixture(t, "no_changes")
 
-	err := commit(repoConfig)
+	err := commit(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
@@ -100,7 +101,7 @@ func HasHeadCommit(t *testing.T, repoPath string, hash string, msg string) {
 func Test_NewFile(t *testing.T) {
 	repoConfig := PrepareFixture(t, "new_file")
 
-	err := commit(repoConfig)
+	err := commit(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	HasHeadCommit(t, repoConfig.RepoPath, "28cc969d97ddb7640f5e1428bbc8f2947d1ffd57", "?? 2.md\n")
@@ -115,7 +116,7 @@ func Test_NewFile(t *testing.T) {
 func Test_OneFileChange(t *testing.T) {
 	repoConfig := PrepareFixture(t, "one_file_change")
 
-	err := commit(repoConfig)
+	err := commit(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	HasHeadCommit(t, repoConfig.RepoPath, "28cc969d97ddb7640f5e1428bbc8f2947d1ffd57", " M 1.md\n")
@@ -130,7 +131,7 @@ func Test_OneFileChange(t *testing.T) {
 func Test_VimSwapFile(t *testing.T) {
 	repoConfig := PrepareFixture(t, "vim_swap_file")
 
-	err := commit(repoConfig)
+	err := commit(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
@@ -151,7 +152,7 @@ func Test_VimSwapFile(t *testing.T) {
 func Test_MultipleFileChange(t *testing.T) {
 	repoConfig := PrepareFixture(t, "multiple_file_change")
 
-	err := commit(repoConfig)
+	err := commit(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	HasHeadCommit(t, repoConfig.RepoPath, "7058b6b292ee3d1382670334b5f29570a1117ef1", ` D dirA/2.md

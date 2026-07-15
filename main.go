@@ -60,7 +60,7 @@ func main() {
 						return tracerr.Wrap(err)
 					}
 
-					return watcher.WatchForChanges(cfg)
+					return watcher.WatchForChanges(logging.WithRepo(repoPath), cfg)
 				},
 			},
 			{
@@ -92,7 +92,7 @@ func main() {
 
 					cfg.Env = append(cfg.Env, ctx.StringSlice("env")...)
 
-					err = syncer.AutoSync(cfg)
+					err = syncer.AutoSync(logging.WithRepo(repoPath), cfg)
 					if err != nil {
 						return tracerr.Wrap(err)
 					}

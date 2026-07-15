@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"log/slog"
 	"testing"
 
 	"gopkg.in/src-d/go-git.v4"
@@ -17,7 +18,7 @@ import (
 func Test_RebaseNothing(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_nothing", []string{"rebase_parent"})
 
-	err := rebase(repoConfig)
+	err := rebase(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
@@ -38,7 +39,7 @@ func Test_RebaseNothing(t *testing.T) {
 func Test_RebaseLocalCommits(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_local_commits", []string{"rebase_parent"})
 
-	err := rebase(repoConfig)
+	err := rebase(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
@@ -59,7 +60,7 @@ func Test_RebaseLocalCommits(t *testing.T) {
 func Test_RebaseRemoteCommits(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_remote_commits", []string{"rebase_parent"})
 
-	err := rebase(repoConfig)
+	err := rebase(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
@@ -80,7 +81,7 @@ func Test_RebaseRemoteCommits(t *testing.T) {
 func Test_RebaseBothCommitsNoConflict(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_both_commits", []string{"rebase_parent"})
 
-	err := rebase(repoConfig)
+	err := rebase(slog.Default(), repoConfig)
 	assert.NilError(t, err)
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
@@ -109,7 +110,7 @@ func Test_RebaseBothCommitsConflict(t *testing.T) {
 	origHead, err := r.Head()
 	assert.NilError(t, err)
 
-	err = rebase(repoConfig)
+	err = rebase(slog.Default(), repoConfig)
 	assert.Equal(t, err, errRebaseFailed)
 
 	newHead, err := r.Head()

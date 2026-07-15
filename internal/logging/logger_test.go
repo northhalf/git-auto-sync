@@ -159,6 +159,60 @@ func TestSetupLoggerWithPathWritesDebugToFile(t *testing.T) {
 	}
 }
 
+// @description    Verifies non-debug output uses second precision and omits source information.
+//
+// @param           t  "test handle used for output assertions"
+func TestHandlerOptionsNonDebugFormatsTimeWithoutSource(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, newHandlerOptions(false)))
+	record := slog.NewRecord(time.Date(2026, 7, 15, 10, 20, 55, 968000000, time.FixedZone("UTC+8", 8*60*60)), slog.LevelInfo, "sync complete", 1)
+
+	if err := logger.Handler().Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	got := output.String()
+	if !strings.Contains(got, "time=2026-07-15T10:20:55 ") {
+		t.Fatalf("output %q does not contain shortened time", got)
+	}
+	if strings.Contains(got, "source=") {
+		t.Fatalf("output %q contains source when debug is disabled", got)
+	}
+}
+
+// @description    Verifies debug handler options emit source information.
+//
+// @param           t  "test handle used for source assertion"
+func TestHandlerOptionsDebugAddsSource(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, newHandlerOptions(true)))
+
+	logger.Info("source record")
+
+	got := output.String()
+	if !strings.Contains(got, "source=internal/logging/logger_test.go") {
+		t.Fatalf("debug output %q does not contain project-relative caller source", got)
+	}
+	if strings.Contains(got, "logger_test.go:") {
+		t.Fatalf("debug output %q contains a source line number", got)
+	}
+}
+
+// @description    Verifies repository loggers attach the configured repository path.
+//
+// @param           t  "test handle used for default logger cleanup and attribute assertion"
+func TestWithRepoAddsRepositoryPath(t *testing.T) {
+	restoreDefaultLogger(t)
+	var output bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, &slog.HandlerOptions{ReplaceAttr: removeTimeAttr})))
+
+	WithRepo("relative/repository").Info("sync complete")
+
+	if got := output.String(); !strings.Contains(got, "msg=\"sync complete\"") || !strings.Contains(got, "repo=relative/repository") {
+		t.Fatalf("repository logger output = %q, want message and repo attribute", got)
+	}
+}
+
 // @description    Verifies setup creates a new Unix log file with owner-only permissions.
 //
 // @param           t  "test handle used for temporary file and mode assertions"

@@ -42,8 +42,9 @@ func (d *Daemon) run() {
 	for _, repoPath := range daemonConfig.Repos {
 		wg.Add(1)
 
-		slog.Info("monitoring repo", "repo", repoPath)
-		go watchForChanges(&wg, repoPath)
+		logger := logging.WithRepo(repoPath)
+		logger.Info("monitoring repo")
+		go watchForChanges(&wg, logger, repoPath)
 	}
 
 	wg.Wait()
@@ -94,20 +95,19 @@ func main() {
 //
 // @param           wg        "wait group tracking the repository watcher"
 //
+// @param           logger    "repository-scoped logger"
+//
 // @param           repoPath  "path to the repository to watch"
-func watchForChanges(wg *sync.WaitGroup, repoPath string) {
+func watchForChanges(wg *sync.WaitGroup, logger *slog.Logger, repoPath string) {
 	defer wg.Done()
 
 	cfg, err := config.NewRepoConfig(repoPath)
 	if err != nil {
-		slog.Error("build repo config failed", "repo", repoPath, "error", err)
+		logger.Error("build repo config failed", "error", err)
 		return
 	}
 
-	err = watcher.WatchForChanges(cfg)
-	if err != nil {
-		slog.Error("watch repo failed", "repo", repoPath, "error", err)
-	}
+	_ = watcher.WatchForChanges(logger, cfg)
 }
 
 // FIXME: Handle operating system signal which tells it to reload the config
