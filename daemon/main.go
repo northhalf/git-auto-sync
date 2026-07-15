@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/kardianos/service"
@@ -40,7 +40,7 @@ func (d *Daemon) run() {
 	for _, repoPath := range config.Repos {
 		wg.Add(1)
 
-		fmt.Println("Monitoring", repoPath)
+		slog.Info("monitoring repo", "repo", repoPath)
 		go watchForChanges(&wg, repoPath)
 	}
 
@@ -62,16 +62,20 @@ func (d *Daemon) Stop(s service.Service) error {
 // main constructs the daemon service, obtains its logger, and runs the service. It terminates on
 // setup errors and logs a service run error.
 func main() {
+	_, _ = common.SetupDaemonLogger(os.Getenv("DEBUG") == "true")
+
 	daemon := Daemon{}
 	autoSyncService, err := common.NewServiceWithDaemon(&daemon)
 	if err != nil {
-		log.Fatal("BuildService", err)
+		slog.Error("build service failed", "error", err)
+		os.Exit(1)
 	}
 
 	s := autoSyncService.Service
 	logger, err := s.Logger(nil)
 	if err != nil {
-		log.Fatal("BuildLogger", err)
+		slog.Error("build service logger failed", "error", err)
+		os.Exit(1)
 	}
 
 	err = s.Run()
@@ -94,12 +98,13 @@ func watchForChanges(wg *sync.WaitGroup, repoPath string) {
 
 	cfg, err := common.NewRepoConfig(repoPath)
 	if err != nil {
-		log.Println(err)
+		slog.Error("build repo config failed", "repo", repoPath, "error", err)
+		return
 	}
 
 	err = common.WatchForChanges(cfg)
 	if err != nil {
-		log.Println(err)
+		slog.Error("watch repo failed", "repo", repoPath, "error", err)
 	}
 }
 

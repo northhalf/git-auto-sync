@@ -87,6 +87,10 @@ Git Auto Sync uses rebase, not merge. If a rebase conflict occurs, it aborts the
 
 Hidden files, files ignored by Git, and editor swap/backup files (e.g., Vim, Emacs) are excluded from commits and filesystem monitoring.
 
+### Log rotation limitation
+
+The CLI and daemon use separate rotating log files. Multiple CLI processes, such as a running `watch` command and a manual `sync`, still write to the same `git-auto-sync.log` file. The rotation library does not coordinate across processes, so concurrent CLI processes may exceed the configured rotation size or lose log records during rotation.
+
 ## License
 
 Apache-2.0

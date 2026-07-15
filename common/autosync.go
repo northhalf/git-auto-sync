@@ -2,12 +2,12 @@ package common
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/gen2brain/beeep"
 	"github.com/ztrue/tracerr"
 )
 
-// FIXME: Add logs for when we commit, pull, and push
 // @description    Synchronizes a Git repository.
 //
 // AutoSync verifies the Git author, commits eligible worktree changes, fetches remotes, rebases
@@ -19,21 +19,25 @@ import (
 // @return          error       "nil on success, or an error from any synchronization stage or alert"
 func AutoSync(repoConfig RepoConfig) error {
 	var err error
+	slog.Info("verifying git author", "repo", repoConfig.RepoPath)
 	err = ensureGitAuthor(repoConfig)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
+	slog.Info("committing worktree changes", "repo", repoConfig.RepoPath)
 	err = commit(repoConfig)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
+	slog.Info("fetching remotes", "repo", repoConfig.RepoPath)
 	err = fetch(repoConfig)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
+	slog.Info("rebasing onto upstream", "repo", repoConfig.RepoPath)
 	err = rebase(repoConfig)
 	if err != nil {
 		if errors.Is(err, errRebaseFailed) {
@@ -49,6 +53,7 @@ func AutoSync(repoConfig RepoConfig) error {
 		return tracerr.Wrap(err)
 	}
 
+	slog.Info("pushing changes", "repo", repoConfig.RepoPath)
 	err = push(repoConfig)
 	if err != nil {
 		return tracerr.Wrap(err)

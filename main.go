@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -16,14 +16,26 @@ var version = "dev"
 
 // @description    Runs the command-line application.
 //
-// main builds the command-line application, runs the requested command, and terminates with a
-// logged fatal error when command execution fails.
+// main builds the command-line application, configures logging, runs the requested command, and
+// terminates with a nonzero status when command execution fails.
 func main() {
 	app := &cli.App{
 		Name:                 "git-auto-sync",
 		Version:              version,
 		Usage:                "Automatically Sync any Git Repo",
 		EnableBashCompletion: true,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "debug",
+				Usage:   "Enable debug logging to stdout",
+				EnvVars: []string{"DEBUG"},
+			},
+		},
+		Before: func(ctx *cli.Context) error {
+			debug := ctx.Bool("debug") || os.Getenv("DEBUG") == "true"
+			_, _ = common.SetupLogger(debug)
+			return nil
+		},
 		Commands: []*cli.Command{
 			{
 				Name:    "watch",
@@ -153,6 +165,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("run failed", "error", err)
+		os.Exit(1)
 	}
 }

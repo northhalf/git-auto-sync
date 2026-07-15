@@ -1,7 +1,7 @@
 package common
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -82,7 +82,7 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 //
 // WatchForChanges performs an initial sync, then watches recursive filesystem events while a
 // goroutine requests further syncs from eligible events, a periodic ticker, and platform wake
-// notifications. Notifier and later sync errors terminate the process through the logger; normal
+// notifications. Notifier and later sync errors are logged before terminating the process; normal
 // operation loops indefinitely.
 //
 // @param           cfg    "repository configuration and watcher timing values"
@@ -104,12 +104,14 @@ func WatchForChanges(cfg RepoConfig) error {
 	go func() {
 		notifier, err := NewAwakeNotifier()
 		if err != nil {
-			log.Fatalln(err)
+			slog.Error("watcher error", "error", err)
+			os.Exit(1)
 		}
 
 		err = notifier.Start(notifyFilteredChannel)
 		if err != nil {
-			log.Fatalln(err)
+			slog.Error("watcher error", "error", err)
+			os.Exit(1)
 		}
 
 		for {
@@ -119,14 +121,16 @@ func WatchForChanges(cfg RepoConfig) error {
 
 				err := AutoSync(cfg)
 				if err != nil {
-					log.Fatalln(err)
+					slog.Error("sync after filesystem event failed", "repo", cfg.RepoPath, "error", err)
+					os.Exit(1)
 				}
 				continue
 
 			case <-syncTicker.C:
 				err := AutoSync(cfg)
 				if err != nil {
-					log.Fatalln(err)
+					slog.Error("sync after ticker failed", "repo", cfg.RepoPath, "error", err)
+					os.Exit(1)
 				}
 			}
 		}
