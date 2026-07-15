@@ -37,3 +37,29 @@ func Test_HiddenFilesIgnore(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, ignore, false)
 }
+
+// @description    Verifies safe handling when the checked path is the repository root.
+//
+// Test_ShouldIgnoreFile_RepoRoot verifies that the repository root itself is ignored without panic.
+//
+// @param           t   "test handle used for fixture setup and assertion"
+func Test_ShouldIgnoreFile_RepoRoot(t *testing.T) {
+	repoPath := PrepareFixture(t, "ignore").RepoPath
+
+	ignore, err := ShouldIgnoreFile(repoPath, repoPath)
+	assert.NilError(t, err)
+	assert.Equal(t, ignore, false)
+}
+
+// @description    Verifies safe handling when no path is provided.
+//
+// Test_ShouldIgnoreFile_EmptyPath verifies that ShouldIgnoreFile returns an error instead of
+// panicking when given an empty filePath.
+//
+// @param           t   "test handle used for fixture setup and assertion"
+func Test_ShouldIgnoreFile_EmptyPath(t *testing.T) {
+	repoPath := PrepareFixture(t, "ignore").RepoPath
+
+	_, err := ShouldIgnoreFile(repoPath, "")
+	assert.ErrorContains(t, err, "path")
+}

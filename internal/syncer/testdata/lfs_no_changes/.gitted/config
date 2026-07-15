@@ -1,0 +1,10 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[user]
+	email = test@example.com
+	name = Test
+[lfs]
+	repositoryformatversion = 0

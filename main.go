@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
@@ -115,6 +117,9 @@ func main() {
 					}
 
 					path := ctx.Args().First()
+					if strings.TrimSpace(path) == "" {
+						return errors.New("missing file path argument")
+					}
 					path, err = filepath.Abs(path)
 					if err != nil {
 						return tracerr.Wrap(err)

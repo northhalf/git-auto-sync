@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,10 @@ import (
 //
 // @return          error     "nil on success, or an error while inspecting the file or Git rules"
 func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
+	if strings.TrimSpace(filePath) == "" {
+		return false, errors.New("file path cannot be empty")
+	}
+
 	if !filepath.IsAbs(filePath) {
 		filePath = path.Join(repoPath, filePath)
 	}
@@ -37,7 +42,12 @@ func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 		return true, nil
 	}
 
-	relativePath := filePath[len(repoPath)+1:]
+	relativePath, err := filepath.Rel(repoPath, filePath)
+	if err != nil {
+		return false, tracerr.Wrap(err)
+	}
+	relativePath = filepath.ToSlash(relativePath)
+
 	if strings.HasPrefix(relativePath, ".git/") {
 		return true, nil
 	}

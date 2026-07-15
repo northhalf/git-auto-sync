@@ -92,6 +92,27 @@ func HasHeadCommit(t *testing.T, repoPath string, hash string, msg string) {
 	assert.Equal(t, commit.Message, msg)
 }
 
+// @description    Verifies that LFS-tracked files matching their pointer are not committed.
+//
+// Test_LFSNoChanges verifies that a working-tree binary whose index entry is a Git LFS pointer is
+// treated as unchanged and does not produce a new commit.
+//
+// @param           t   "test handle used for fixture setup and assertions"
+func Test_LFSNoChanges(t *testing.T) {
+	repoConfig := PrepareFixture(t, "lfs_no_changes")
+
+	err := commit(slog.Default(), repoConfig)
+	assert.NilError(t, err)
+
+	r, err := git.PlainOpen(repoConfig.RepoPath)
+	assert.NilError(t, err)
+
+	head, err := r.Head()
+	assert.NilError(t, err)
+
+	assert.Equal(t, head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
+}
+
 // @description    Verifies commits for untracked files.
 //
 // Test_NewFile verifies that committing an untracked file creates a new HEAD commit with the
