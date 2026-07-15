@@ -1,6 +1,7 @@
-package common
+package syncer
 
 import (
+	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/ztrue/tracerr"
 )
 
@@ -12,7 +13,7 @@ import (
 // @param           repoConfig  "configuration for the repository to push"
 //
 // @return          error       "nil on success or no upstream, or a branch lookup or Git error"
-func push(repoConfig RepoConfig) error {
+func push(repoConfig config.RepoConfig) error {
 	bi, err := fetchBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		return tracerr.Wrap(err)
@@ -22,7 +23,7 @@ func push(repoConfig RepoConfig) error {
 		return nil
 	}
 
-	_, err = GitCommand(repoConfig, []string{"push", bi.UpstreamRemote, bi.UpstreamBranch})
+	_, err = gitCommand(repoConfig, []string{"push", bi.UpstreamRemote, bi.UpstreamBranch})
 	if err != nil {
 		return tracerr.Wrap(err)
 	}

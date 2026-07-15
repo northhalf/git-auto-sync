@@ -1,4 +1,4 @@
-package common
+package watcher
 
 type AwakeNotifierEmpty struct{}
 

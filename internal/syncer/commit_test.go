@@ -1,6 +1,7 @@
-package common
+package syncer
 
 import (
+	"github.com/northhalf/git-auto-sync/internal/config"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,8 +22,8 @@ import (
 //
 // @param           name   "name of the fixture directory under testdata"
 //
-// @return          RepoConfig   "configuration for the copied temporary repository"
-func PrepareFixture(t *testing.T, name string) RepoConfig {
+// @return          config.RepoConfig   "configuration for the copied temporary repository"
+func PrepareFixture(t *testing.T, name string) config.RepoConfig {
 	newRepoPath, err := os.MkdirTemp(os.TempDir(), name)
 	assert.NilError(t, err)
 
@@ -33,7 +34,7 @@ func PrepareFixture(t *testing.T, name string) RepoConfig {
 	err = os.Rename(filepath.Join(newRepoPath, ".gitted"), filepath.Join(newRepoPath, ".git"))
 	assert.NilError(t, err)
 
-	repoConfig, err := NewRepoConfig(newRepoPath)
+	repoConfig, err := config.NewRepoConfig(newRepoPath)
 	assert.NilError(t, err)
 
 	return repoConfig

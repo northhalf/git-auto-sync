@@ -9,7 +9,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
 
-	"github.com/northhalf/git-auto-sync/common"
+	"github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/northhalf/git-auto-sync/internal/logging"
+	"github.com/northhalf/git-auto-sync/internal/syncer"
+	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
 var version = "dev"
@@ -33,7 +36,7 @@ func main() {
 		},
 		Before: func(ctx *cli.Context) error {
 			debug := ctx.Bool("debug") || os.Getenv("DEBUG") == "true"
-			_, _ = common.SetupLogger(debug)
+			_, _ = logging.SetupLogger(debug)
 			return nil
 		},
 		Commands: []*cli.Command{
@@ -52,12 +55,12 @@ func main() {
 						return tracerr.Wrap(err)
 					}
 
-					cfg, err := common.NewRepoConfig(repoPath)
+					cfg, err := config.NewRepoConfig(repoPath)
 					if err != nil {
 						return tracerr.Wrap(err)
 					}
 
-					return common.WatchForChanges(cfg)
+					return watcher.WatchForChanges(cfg)
 				},
 			},
 			{
@@ -82,14 +85,14 @@ func main() {
 						return tracerr.Wrap(err)
 					}
 
-					cfg, err := common.NewRepoConfig(repoPath)
+					cfg, err := config.NewRepoConfig(repoPath)
 					if err != nil {
 						return tracerr.Wrap(err)
 					}
 
 					cfg.Env = append(cfg.Env, ctx.StringSlice("env")...)
 
-					err = common.AutoSync(cfg)
+					err = syncer.AutoSync(cfg)
 					if err != nil {
 						return tracerr.Wrap(err)
 					}
@@ -117,7 +120,7 @@ func main() {
 						return tracerr.Wrap(err)
 					}
 
-					ignored, err := common.ShouldIgnoreFile(repoPath, path)
+					ignored, err := syncer.ShouldIgnoreFile(repoPath, path)
 					if err != nil {
 						return tracerr.Wrap(err)
 					}

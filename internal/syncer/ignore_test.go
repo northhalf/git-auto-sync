@@ -1,4 +1,4 @@
-package common
+package syncer
 
 import (
 	"testing"

@@ -1,7 +1,8 @@
-package common
+package syncer
 
 import (
 	"bytes"
+	"github.com/northhalf/git-auto-sync/internal/config"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,8 +25,8 @@ import (
 //
 // @param           deps   "names of dependency fixtures to copy into temporary testdata"
 //
-// @return          RepoConfig   "configuration for the prepared repository fixture"
-func PrepareMultiFixtures(t *testing.T, name string, deps []string) RepoConfig {
+// @return          config.RepoConfig   "configuration for the prepared repository fixture"
+func PrepareMultiFixtures(t *testing.T, name string, deps []string) config.RepoConfig {
 	newTestDataPath := t.TempDir()
 
 	for _, name := range deps {
@@ -38,10 +39,10 @@ func PrepareMultiFixtures(t *testing.T, name string, deps []string) RepoConfig {
 		assert.NilError(t, err)
 	}
 
-	newRepoConfig := PrepareFixture(t, name)
-	FixFixtureGitConfig(t, newRepoConfig.RepoPath, newTestDataPath)
+	repoConfig := PrepareFixture(t, name)
+	FixFixtureGitConfig(t, repoConfig.RepoPath, newTestDataPath)
 
-	return newRepoConfig
+	return repoConfig
 }
 
 // @description    Rewrites fixture remote paths.

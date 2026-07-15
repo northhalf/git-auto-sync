@@ -29,14 +29,14 @@ func setup(t *testing.T, _ string) {
 func Test_SimpleWriteReadV1(t *testing.T) {
 	setup(t, "SimpleWriteRead")
 
-	c := &Config{
+	c := &DaemonConfig{
 		Repos: []string{"/home/xyz/hello"},
 		Envs:  []string{"SSH_AUTH_SOCK=/private/tmp/com.apple.launchd.74ZznY1v1F/Listeners"},
 	}
-	err := Write(c)
+	err := WriteDaemonConfig(c)
 	assert.NilError(t, err)
 
-	c2, err := Read()
+	c2, err := ReadDaemonConfig()
 	assert.NilError(t, err)
 
 	assert.DeepEqual(t, c, c2)
@@ -51,7 +51,7 @@ func Test_SimpleWriteReadV1(t *testing.T) {
 func Test_ReadEmptyV1(t *testing.T) {
 	setup(t, "ReadEmpty")
 
-	c, err := Read()
+	c, err := ReadDaemonConfig()
 	assert.NilError(t, err)
 	assert.Assert(t, len(c.Repos) == 0)
 }

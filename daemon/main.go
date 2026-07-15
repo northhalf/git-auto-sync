@@ -6,8 +6,10 @@ import (
 	"sync"
 
 	"github.com/kardianos/service"
-	"github.com/northhalf/git-auto-sync/common"
-	cfg "github.com/northhalf/git-auto-sync/common/config"
+	"github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/northhalf/git-auto-sync/internal/daemonservice"
+	"github.com/northhalf/git-auto-sync/internal/logging"
+	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
 type Daemon struct{}
@@ -30,14 +32,14 @@ func (d *Daemon) Start(s service.Service) error {
 // run reads the daemon configuration, starts one watcher goroutine per repository, and blocks
 // until all watchers stop. It panics if configuration loading fails.
 func (d *Daemon) run() {
-	config, err := cfg.Read()
+	daemonConfig, err := config.ReadDaemonConfig()
 	if err != nil {
 		panic(err)
 	}
 
 	var wg sync.WaitGroup
 
-	for _, repoPath := range config.Repos {
+	for _, repoPath := range daemonConfig.Repos {
 		wg.Add(1)
 
 		slog.Info("monitoring repo", "repo", repoPath)
@@ -62,10 +64,10 @@ func (d *Daemon) Stop(s service.Service) error {
 // main constructs the daemon service, obtains its logger, and runs the service. It terminates on
 // setup errors and logs a service run error.
 func main() {
-	_, _ = common.SetupDaemonLogger(os.Getenv("DEBUG") == "true")
+	_, _ = logging.SetupDaemonLogger(os.Getenv("DEBUG") == "true")
 
 	daemon := Daemon{}
-	autoSyncService, err := common.NewServiceWithDaemon(&daemon)
+	autoSyncService, err := daemonservice.NewServiceWithDaemon(&daemon)
 	if err != nil {
 		slog.Error("build service failed", "error", err)
 		os.Exit(1)
@@ -96,13 +98,13 @@ func main() {
 func watchForChanges(wg *sync.WaitGroup, repoPath string) {
 	defer wg.Done()
 
-	cfg, err := common.NewRepoConfig(repoPath)
+	cfg, err := config.NewRepoConfig(repoPath)
 	if err != nil {
 		slog.Error("build repo config failed", "repo", repoPath, "error", err)
 		return
 	}
 
-	err = common.WatchForChanges(cfg)
+	err = watcher.WatchForChanges(cfg)
 	if err != nil {
 		slog.Error("watch repo failed", "repo", repoPath, "error", err)
 	}

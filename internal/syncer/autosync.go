@@ -1,7 +1,8 @@
-package common
+package syncer
 
 import (
 	"errors"
+	"github.com/northhalf/git-auto-sync/internal/config"
 	"log/slog"
 
 	"github.com/gen2brain/beeep"
@@ -17,7 +18,7 @@ import (
 // @param           repoConfig  "configuration for the repository to synchronize"
 //
 // @return          error       "nil on success, or an error from any synchronization stage or alert"
-func AutoSync(repoConfig RepoConfig) error {
+func AutoSync(repoConfig config.RepoConfig) error {
 	var err error
 	slog.Info("verifying git author", "repo", repoConfig.RepoPath)
 	err = ensureGitAuthor(repoConfig)

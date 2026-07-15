@@ -31,42 +31,43 @@ make
 go test ./...
 
 # Run one package
-go test ./common
+go test ./internal/syncer
 
 # Run one test by exact name
-go test ./common -run '^Test_NewFile$'
+go test ./internal/syncer -run '^Test_NewFile$'
 
 # Disable the test cache while iterating
-go test -count=1 ./common -run '^Test_RebaseBothCommitsConflict$'
+go test -count=1 ./internal/syncer -run '^Test_RebaseBothCommitsConflict$'
 
 # Run the CI linter
 golangci-lint run ./...
 
 # Check formatting without modifying files
-test -z "$(gofmt -l -- *.go common/*.go common/config/*.go daemon/*.go)"
+test -z "$(gofmt -l -- *.go daemon/*.go internal/config/*.go internal/daemonservice/*.go internal/logging/*.go internal/syncer/*.go internal/watcher/*.go)"
 
 # Apply formatting
-gofmt -w -- *.go common/*.go common/config/*.go daemon/*.go
+gofmt -w -- *.go daemon/*.go internal/config/*.go internal/daemonservice/*.go internal/logging/*.go internal/syncer/*.go internal/watcher/*.go
 ```
 
-The integration-style tests under `common` copy repositories from `common/testdata` into temporary directories. Fixtures store repository metadata as `.gitted`; test helpers rename it to `.git` after copying. Fetch and rebase fixtures also rewrite `$TESTDATA$` remote paths. Preserve that layout when adding fixture cases.
+The integration-style tests under `internal/syncer` copy repositories from `internal/syncer/testdata` into temporary directories. Fixtures store repository metadata as `.gitted`; test helpers rename it to `.git` after copying. Fetch and rebase fixtures also rewrite `$TESTDATA$` remote paths. Preserve that layout when adding fixture cases.
 
 ## Architecture
 
 The project produces two executables:
 
-- The root `main` package builds `git-auto-sync`, the user-facing CLI. `main.go` defines `watch`, `sync`, `check`, and `daemon` commands. `daemon.go` implements daemon configuration and service-management subcommands.
+- The root `main` package builds `git-auto-sync`, the user-facing CLI. `main.go` defines `watch`, `sync`, `check`, and `daemon` commands. `daemon_cmd.go` implements daemon configuration and service-management subcommands, while `repository.go` contains shared CLI repository validation.
 - `daemon/main.go` builds `git-auto-sync-daemon`, the service process. It reads the configured repositories, starts one watcher goroutine per repository, and runs through `kardianos/service`. The service setup expects this binary beside `git-auto-sync`.
 
-Most behavior lives in `common`:
+Shared behavior is organized under `internal` by responsibility:
 
-1. `NewRepoConfig` reads per-repository settings from the Git config section `[auto-sync]`. `syncInterval` controls periodic syncs in seconds, and `exec` selects a Git executable. The CLI can append explicit `--env KEY=VALUE` entries for a manual sync.
-2. `AutoSync` runs a fixed pipeline: verify `user.email` and `user.name`, commit eligible worktree changes, fetch every remote, rebase onto the current branch's configured upstream, then push to that upstream.
-3. The code uses `go-git` for repository discovery, status, staging, branch configuration, and ignore matching. Mutating/network operations run the external `git` command through `GitCommand`, which controls the working directory and environment.
+1. `internal/config` stores daemon configuration and reads per-repository settings from the Git config section `[auto-sync]`. `syncInterval` controls periodic syncs in seconds, and `exec` selects a Git executable. The CLI can append explicit `--env KEY=VALUE` entries for a manual sync.
+2. `internal/syncer` implements `AutoSync`: verify `user.email` and `user.name`, commit eligible worktree changes, fetch every remote, rebase onto the current branch's configured upstream, then push to that upstream.
+3. The syncer uses `go-git` for repository discovery, status, staging, branch configuration, and ignore matching. Mutating and network operations run through the package-private `gitCommand`, which controls the working directory and environment.
 4. A rebase conflict triggers `git rebase --abort`, returns `errRebaseFailed`, and causes `AutoSync` to send a desktop notification. The sync stops before push.
-5. `WatchForChanges` performs an initial sync, then combines recursive filesystem notifications, a periodic ticker, and platform-specific wake notifications. It filters events through `ShouldIgnoreFile` before requesting another sync.
+5. `internal/watcher` implements `WatchForChanges`, combining recursive filesystem notifications, a periodic ticker, and platform-specific wake notifications. It uses `syncer.ShouldIgnoreFile` before requesting another sync.
+6. `internal/logging` configures CLI and daemon logs, while `internal/daemonservice` wraps user-service installation and lifecycle operations.
 
-Daemon state is separate from repository-local settings. `common/config` stores watched repository paths and daemon environment entries in the platform-local `git-auto-sync/config.json`. The CLI updates this file and installs, starts, stops, or uninstalls the user service through `common/service.go`.
+Daemon state is separate from repository-local settings. `internal/config/daemonconfig.go` stores watched repository paths and daemon environment entries in the platform-local `git-auto-sync/config.json`.
 
 `ShouldIgnoreFile` is shared by the watcher and commit path. It excludes editor swap/backup files, `.git` contents, empty files, and files matched by Git ignore/exclude rules. Keep event filtering and commit filtering aligned when changing ignore behavior.
 

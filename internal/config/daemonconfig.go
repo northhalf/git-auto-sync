@@ -8,7 +8,7 @@ import (
 	"github.com/ztrue/tracerr"
 )
 
-type Config struct {
+type DaemonConfig struct {
 	Repos []string `json:"repos"`
 	Envs  []string `json:"envs"`
 }
@@ -19,10 +19,10 @@ type Config struct {
 // configuration when the file does not exist. A deferred close error becomes the returned error
 // when no earlier error occurred.
 //
-// @return          *ConfigV1  "decoded configuration, or an empty configuration when no file exists"
+// @return          *DaemonConfigV1  "decoded configuration, or an empty configuration when no file exists"
 //
 // @return          err        "nil on success, or an error creating, opening, decoding, or closing the file"
-func Read() (_ *Config, err error) {
+func ReadDaemonConfig() (_ *DaemonConfig, err error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, tracerr.Wrap(err)
@@ -35,7 +35,7 @@ func Read() (_ *Config, err error) {
 	}
 
 	configFile := filepath.Join(configPath, "config.json")
-	config := Config{}
+	config := DaemonConfig{}
 
 	if _, err = os.Stat(configFile); os.IsNotExist(err) {
 		return &config, nil
@@ -70,7 +70,7 @@ func Read() (_ *Config, err error) {
 // @param           config  "version-one configuration to persist"
 //
 // @return          err     "nil on success, or an error creating, encoding, or closing the file"
-func Write(config *Config) (err error) {
+func WriteDaemonConfig(config *DaemonConfig) (err error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return tracerr.Wrap(err)

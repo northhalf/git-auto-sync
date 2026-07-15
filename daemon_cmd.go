@@ -4,17 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/kardianos/service"
-	"github.com/northhalf/git-auto-sync/common"
-	cfg "github.com/northhalf/git-auto-sync/common/config"
+	cfg "github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/northhalf/git-auto-sync/internal/daemonservice"
 	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
-	"gopkg.in/src-d/go-git.v4"
 )
 
 // cliDaemon satisfies the service interface for CLI service management without starting a process.
@@ -26,8 +24,6 @@ func (cliDaemon) Start(service.Service) error { return nil }
 // Stop satisfies the service interface without stopping a daemon process.
 func (cliDaemon) Stop(service.Service) error { return nil }
 
-var errRepoPathInvalid = errors.New("not a valid git repo")
-
 // @description    Prints daemon status and repositories.
 //
 // daemonStatus prints the service status and every repository in the daemon configuration,
@@ -37,7 +33,7 @@ var errRepoPathInvalid = errors.New("not a valid git repo")
 //
 // @return          error  "nil on success, or an error from the service or configuration"
 func daemonStatus(ctx *cli.Context) error {
-	s, err := common.NewServiceWithDaemon(cliDaemon{})
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -47,7 +43,7 @@ func daemonStatus(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	config, err := cfg.Read()
+	config, err := cfg.ReadDaemonConfig()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -68,7 +64,7 @@ func daemonStatus(ctx *cli.Context) error {
 //
 // @return          error  "nil on success, or an error reading the configuration"
 func daemonList(ctx *cli.Context) error {
-	config, err := cfg.Read()
+	config, err := cfg.ReadDaemonConfig()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -100,7 +96,7 @@ func daemonAdd(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	config, err := cfg.Read()
+	config, err := cfg.ReadDaemonConfig()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -111,12 +107,12 @@ func daemonAdd(ctx *cli.Context) error {
 		config.Repos = append(config.Repos, repoPath)
 	}
 
-	err = cfg.Write(config)
+	err = cfg.WriteDaemonConfig(config)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
-	s, err := common.NewServiceWithDaemon(cliDaemon{})
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -127,53 +123,6 @@ func daemonAdd(ctx *cli.Context) error {
 	}
 
 	return nil
-}
-
-// @description    Validates a Git worktree path.
-//
-// isValidGitRepo verifies that a caller-provided path belongs to a non-bare Git worktree and walks
-// upward to find the repository root containing a .git directory.
-//
-// @param           repoPath  "caller-provided path to validate as a Git repository or descendant"
-//
-// @return          string    "repository root derived from the caller-provided path"
-//
-// @return          error     "nil on success, or an error for an invalid path or repository"
-func isValidGitRepo(repoPath string) (string, error) {
-	info, err := os.Stat(repoPath)
-	if os.IsNotExist(err) {
-		return "", tracerr.Errorf("%w - %s", errRepoPathInvalid, repoPath)
-	}
-
-	if !info.IsDir() {
-		return "", tracerr.Errorf("%w - %s", errRepoPathInvalid, repoPath)
-	}
-
-	_, err = git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
-	if err != nil {
-		return "", tracerr.Errorf("Not a valid git repo - %s\n%w", repoPath, err)
-	}
-
-	for {
-		info, err := os.Stat(filepath.Join(repoPath, ".git"))
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return "", tracerr.Errorf("%w - %s", errRepoPathInvalid, repoPath)
-			}
-		}
-
-		if os.IsNotExist(err) {
-			repoPath = filepath.Dir(repoPath)
-			continue
-		}
-
-		if !info.IsDir() {
-			return "", tracerr.Errorf("%w - %s", errRepoPathInvalid, repoPath)
-		}
-		break
-	}
-
-	return repoPath, nil
 }
 
 // @description    Removes a repository from the daemon.
@@ -196,7 +145,7 @@ func daemonRm(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	config, err := cfg.Read()
+	config, err := cfg.ReadDaemonConfig()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -215,13 +164,13 @@ func daemonRm(ctx *cli.Context) error {
 	}
 
 	config.Repos = append(config.Repos[:pos], config.Repos[pos+1:]...)
-	err = cfg.Write(config)
+	err = cfg.WriteDaemonConfig(config)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
 	if len(config.Repos) == 0 {
-		s, err := common.NewServiceWithDaemon(cliDaemon{})
+		s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 		if err != nil {
 			return tracerr.Wrap(err)
 		}
@@ -253,7 +202,7 @@ func daemonEnv(ctx *cli.Context) error {
 		}
 	}
 
-	config, err := cfg.Read()
+	config, err := cfg.ReadDaemonConfig()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -272,7 +221,7 @@ func daemonEnv(ctx *cli.Context) error {
 	for k, v := range envMap {
 		config.Envs = append(config.Envs, k+"="+v)
 	}
-	err = cfg.Write(config)
+	err = cfg.WriteDaemonConfig(config)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}

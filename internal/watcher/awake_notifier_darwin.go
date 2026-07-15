@@ -1,4 +1,4 @@
-package common
+package watcher
 
 import "github.com/prashantgupta24/mac-sleep-notifier/notifier"
 

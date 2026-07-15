@@ -1,7 +1,8 @@
-package common
+package syncer
 
 import (
 	"errors"
+	"github.com/northhalf/git-auto-sync/internal/config"
 	"os/exec"
 
 	"github.com/ztrue/tracerr"
@@ -18,8 +19,8 @@ var errNoGitAuthorName = errors.New("missing git author name")
 // @param           repoConfig  "configuration for the repository to inspect"
 //
 // @return          error       "nil when both author values exist, or an author or command error"
-func ensureGitAuthor(repoConfig RepoConfig) error {
-	_, err := GitCommand(repoConfig, []string{"config", "user.email"})
+func ensureGitAuthor(repoConfig config.RepoConfig) error {
+	_, err := gitCommand(repoConfig, []string{"config", "user.email"})
 	if err != nil {
 		var exerr *exec.ExitError
 		if errors.As(err, &exerr) && exerr.ExitCode() == 1 {
@@ -28,7 +29,7 @@ func ensureGitAuthor(repoConfig RepoConfig) error {
 		return tracerr.Wrap(err)
 	}
 
-	_, err = GitCommand(repoConfig, []string{"config", "user.name"})
+	_, err = gitCommand(repoConfig, []string{"config", "user.name"})
 	if err != nil {
 		var exerr *exec.ExitError
 		if errors.As(err, &exerr) && exerr.ExitCode() == 1 {
