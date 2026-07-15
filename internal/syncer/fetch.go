@@ -3,9 +3,9 @@ package syncer
 import (
 	"log/slog"
 
+	git "github.com/go-git/go-git/v5"
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/ztrue/tracerr"
-	git "gopkg.in/src-d/go-git.v4"
 )
 
 // @description    Fetches every configured remote.

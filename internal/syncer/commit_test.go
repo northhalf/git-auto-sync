@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	cp "github.com/otiai10/copy"
-	"gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing"
 
 	"gotest.tools/v3/assert"
 )

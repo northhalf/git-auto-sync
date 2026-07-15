@@ -12,10 +12,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/format/index"
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/ztrue/tracerr"
-	"gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/format/index"
 )
 
 // @description    Commits eligible worktree changes.

@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/ztrue/tracerr"
-	"gopkg.in/src-d/go-git.v4"
 )
 
 var errRepoPathInvalid = errors.New("not a valid git repo")

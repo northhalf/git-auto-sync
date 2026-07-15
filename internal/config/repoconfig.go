@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/ztrue/tracerr"
-	"gopkg.in/src-d/go-git.v4"
 )
 
 type RepoConfig struct {
