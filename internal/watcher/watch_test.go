@@ -139,7 +139,7 @@ func Test_WatchLoopRetriesRemoteErrors(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runWatchLoop(ctx, discardLogger(), config.RepoConfig{FSLag: time.Millisecond}, nil, nil, nil, deps)
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, nil, deps)
 	}()
 
 	assert.Equal(t, waitForSyncCall(t, calls), 1)
@@ -178,7 +178,7 @@ func Test_WatchLoopResetsRetryAfterSuccess(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runWatchLoop(ctx, discardLogger(), config.RepoConfig{FSLag: time.Millisecond}, nil, nil, ticks, deps)
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, ticks, deps)
 	}()
 
 	assert.Equal(t, waitForSyncCall(t, calls), 1)
@@ -221,7 +221,7 @@ func Test_WatchLoopPausesAfterNonRemoteError(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runWatchLoop(ctx, discardLogger(), config.RepoConfig{FSLag: time.Millisecond}, nil, nil, ticks, deps)
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, ticks, deps)
 	}()
 
 	assert.Equal(t, waitForSyncCall(t, calls), 1)
@@ -268,7 +268,7 @@ func Test_WatchLoopCoalescesTriggersDuringSync(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runWatchLoop(ctx, discardLogger(), config.RepoConfig{FSLag: time.Millisecond}, nil, nil, ticks, deps)
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, ticks, deps)
 	}()
 
 	assert.Equal(t, waitForSyncCall(t, calls), 1)
@@ -286,6 +286,75 @@ func Test_WatchLoopCoalescesTriggersDuringSync(t *testing.T) {
 
 	cancel()
 	waitForWatchDone(t, done)
+}
+
+// @description    Verifies immediate triggers consume pending file debounce.
+//
+// Test_WatchLoopImmediateTriggersCancelDebounce verifies that periodic and awake triggers synchronize
+// without waiting for the filesystem debounce and prevent its timer from starting a later empty sync.
+//
+// @param           t   "test handle used for trigger timing and synchronization assertions"
+func Test_WatchLoopImmediateTriggersCancelDebounce(t *testing.T) {
+	tests := []struct {
+		name string
+		wake bool
+	}{
+		{name: "periodic"},
+		{name: "awake", wake: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			calls := make(chan int, 3)
+			events := make(chan notify.EventInfo)
+			awake := make(chan bool)
+			ticks := make(chan time.Time)
+			var attempts atomic.Int32
+			deps := watchDependencies{
+				autoSync: func() error {
+					calls <- int(attempts.Add(1))
+					return nil
+				},
+				shouldIgnore:      func(string) (bool, error) { return false, nil },
+				isRemoteSyncError: func(error) bool { return false },
+				syncErrorStage:    func(error) string { return "" },
+				retryDelays:       []time.Duration{time.Millisecond},
+			}
+
+			done := make(chan error, 1)
+			go func() {
+				done <- runWatchLoop(ctx, discardLogger(), 100*time.Millisecond, events, awake, ticks, deps)
+			}()
+
+			assert.Equal(t, waitForSyncCall(t, calls), 1)
+			time.Sleep(5 * time.Millisecond)
+			events <- fakeEventInfo{path: "/repo/file"}
+			if tt.wake {
+				awake <- true
+			} else {
+				ticks <- time.Now()
+			}
+
+			select {
+			case call := <-calls:
+				assert.Equal(t, call, 2)
+			case <-time.After(30 * time.Millisecond):
+				t.Fatal("immediate trigger waited for filesystem debounce")
+			}
+
+			select {
+			case call := <-calls:
+				t.Fatalf("canceled debounce started unexpected synchronization %d", call)
+			case <-time.After(120 * time.Millisecond):
+			}
+
+			cancel()
+			waitForWatchDone(t, done)
+		})
+	}
 }
 
 // @description    Verifies cancellation while synchronization is running.
@@ -311,7 +380,7 @@ func Test_WatchLoopWaitsForRunningSyncOnCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runWatchLoop(ctx, discardLogger(), config.RepoConfig{FSLag: time.Millisecond}, nil, nil, nil, deps)
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, nil, deps)
 	}()
 
 	select {
@@ -399,7 +468,7 @@ func Test_WatchLoopWaitsForRunningSyncOnInspectionError(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runWatchLoop(ctx, discardLogger(), config.RepoConfig{FSLag: time.Millisecond}, events, nil, nil, deps)
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, events, nil, nil, deps)
 	}()
 
 	select {

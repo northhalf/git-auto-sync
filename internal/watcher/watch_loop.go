@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/rjeczalik/notify"
 )
 
@@ -51,7 +50,7 @@ func retryDelay(failure int, delays []time.Duration) time.Duration {
 //
 // @param           logger        "repository-scoped logger"
 //
-// @param           cfg           "repository timing configuration"
+// @param           fsLag         "delay applied while filesystem and wake events settle"
 //
 // @param           notifyEvents  "filesystem events, or nil when no filesystem source is attached"
 //
@@ -65,7 +64,7 @@ func retryDelay(failure int, delays []time.Duration) time.Duration {
 func runWatchLoop(
 	ctx context.Context,
 	logger *slog.Logger,
-	cfg config.RepoConfig,
+	fsLag time.Duration,
 	notifyEvents <-chan notify.EventInfo,
 	awakeEvents <-chan bool,
 	syncTicks <-chan time.Time,
@@ -120,17 +119,27 @@ func runWatchLoop(
 			pendingSync = true
 			return
 		}
-		if cfg.FSLag <= 0 {
+		if fsLag <= 0 {
 			startSync()
 			return
 		}
 		stopTimer(debounceTimer)
 		if debounceTimer == nil {
-			debounceTimer = time.NewTimer(cfg.FSLag)
+			debounceTimer = time.NewTimer(fsLag)
 		} else {
-			debounceTimer.Reset(cfg.FSLag)
+			debounceTimer.Reset(fsLag)
 		}
 		debounceC = debounceTimer.C
+	}
+
+	requestImmediateSync := func() {
+		stopTimer(debounceTimer)
+		debounceC = nil
+		if syncRunning {
+			pendingSync = true
+			return
+		}
+		startSync()
 	}
 
 	startSync()
@@ -253,7 +262,7 @@ func runWatchLoop(
 			}
 			switch mode {
 			case watchModeNormal:
-				requestDebouncedSync()
+				requestImmediateSync()
 			case watchModeBackingOff:
 				pendingSync = true
 			case watchModePaused:
@@ -267,11 +276,7 @@ func runWatchLoop(
 			}
 			switch mode {
 			case watchModeNormal:
-				if syncRunning {
-					pendingSync = true
-				} else {
-					startSync()
-				}
+				requestImmediateSync()
 			case watchModeBackingOff:
 				pendingSync = true
 			case watchModePaused:

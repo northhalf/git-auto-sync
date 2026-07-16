@@ -80,7 +80,7 @@ func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoCo
 	}
 
 	logger.Info("watcher started")
-	if err := runWatchLoop(ctx, logger, cfg, notifyChannel, awakeChannel, syncTicker.C, deps); err != nil {
+	if err := runWatchLoop(ctx, logger, cfg.FSLag, notifyChannel, awakeChannel, syncTicker.C, deps); err != nil {
 		return tracerr.Wrap(err)
 	}
 	return nil
