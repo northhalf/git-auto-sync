@@ -42,7 +42,13 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 		cmd = repoConfig.GitExec
 	}
 
-	statusCmd := exec.Command(cmd, args...)
+	// Prepend core.quotePath=false so Git emits raw UTF-8 path bytes instead of octal C-style
+	// escapes such as "\346\265\213". The -z flag used by status already disables quoting, but
+	// setting this explicitly keeps path output parseable for non-ASCII filenames regardless of
+	// the user's git config, and makes non-status command output (fetch, rebase, ...) readable.
+	gitArgs := append([]string{"-c", "core.quotePath=false"}, args...)
+
+	statusCmd := exec.Command(cmd, gitArgs...)
 	statusCmd.Dir = repoConfig.RepoPath
 	statusCmd.Stdout = &outb
 	statusCmd.Stderr = &errb
@@ -55,7 +61,7 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 	}
 
 	if err != nil {
-		fullCmd := cmd + " " + strings.Join(args, " ")
+		fullCmd := cmd + " " + strings.Join(gitArgs, " ")
 		return outb, tracerr.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, statusCmd.Env, outb.String(), errb.String())
 	}
 

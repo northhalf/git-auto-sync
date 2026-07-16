@@ -4,6 +4,7 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -162,6 +163,71 @@ func Test_VimSwapFile(t *testing.T) {
 	assert.NilError(t, err)
 
 	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+}
+
+// @description    Verifies that nested Git repositories are not committed as gitlinks.
+//
+// Test_NestedGitRepositorySkipped verifies that a linked worktree created under the worktree (as
+// .claude/worktrees/ is) is not staged or committed as an embedded gitlink, while a regular
+// untracked file alongside it is committed normally.
+//
+// @param           t   "test handle used for fixture setup and assertions"
+func Test_NestedGitRepositorySkipped(t *testing.T) {
+	repoConfig := PrepareFixture(t, "no_changes")
+
+	// Create a linked worktree inside the repository, mirroring .claude/worktrees/.
+	worktreeCmd := exec.Command("git", "-C", repoConfig.RepoPath, "worktree", "add", "--detach", ".claude/worktrees/feat")
+	assert.NilError(t, worktreeCmd.Run())
+
+	// Add a legitimate untracked file in the parent worktree.
+	assert.NilError(t, os.WriteFile(filepath.Join(repoConfig.RepoPath, "real.md"), []byte("real"), 0o644))
+
+	err := commit(slog.Default(), repoConfig)
+	assert.NilError(t, err)
+
+	// The legitimate file must be committed with its status line as the message.
+	r, err := git.PlainOpen(repoConfig.RepoPath)
+	assert.NilError(t, err)
+	head, err := r.Head()
+	assert.NilError(t, err)
+	c, err := r.CommitObject(head.Hash())
+	assert.NilError(t, err)
+	assert.Equal(t, c.Message, "?? real.md\n")
+
+	// The linked worktree must NOT be tracked as an embedded gitlink.
+	tracked, err := exec.Command("git", "-C", repoConfig.RepoPath, "ls-files", ".claude/worktrees/feat").Output()
+	assert.NilError(t, err)
+	assert.Equal(t, string(tracked), "")
+}
+
+// @description    Verifies that non-ASCII filenames are committed with raw UTF-8 bytes.
+//
+// Test_NonASCIIFilename verifies that a file whose name contains Chinese characters and a space is
+// staged and committed using its raw path, not Git's octal C-style escaping. The -z status flag
+// together with core.quotePath=false keeps path bytes literal so git add and the commit message
+// carry the real filename.
+//
+// @param           t   "test handle used for fixture setup and assertions"
+func Test_NonASCIIFilename(t *testing.T) {
+	repoConfig := PrepareFixture(t, "no_changes")
+
+	assert.NilError(t, os.WriteFile(filepath.Join(repoConfig.RepoPath, "新建 文档.md"), []byte("content"), 0o644))
+
+	err := commit(slog.Default(), repoConfig)
+	assert.NilError(t, err)
+
+	r, err := git.PlainOpen(repoConfig.RepoPath)
+	assert.NilError(t, err)
+	head, err := r.Head()
+	assert.NilError(t, err)
+	c, err := r.CommitObject(head.Hash())
+	assert.NilError(t, err)
+	assert.Equal(t, c.Message, "?? 新建 文档.md\n")
+
+	// The file must be tracked under its raw UTF-8 path.
+	tracked, err := exec.Command("git", "-C", repoConfig.RepoPath, "-c", "core.quotePath=false", "ls-files", "-z", "--", "新建 文档.md").Output()
+	assert.NilError(t, err)
+	assert.Equal(t, string(tracked), "新建 文档.md\x00")
 }
 
 // @description    Verifies commits for multiple file changes.

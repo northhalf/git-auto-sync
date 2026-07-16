@@ -87,6 +87,10 @@ Git Auto Sync uses rebase, not merge. If a rebase conflict occurs, it aborts the
 
 Hidden files, files ignored by Git, and editor swap/backup files (e.g., Vim, Emacs) are excluded from commits and filesystem monitoring.
 
+### Nested repositories
+
+Nested Git repositories found inside the worktree are detected and skipped, so they are never staged or committed as embedded gitlinks (mode `160000`). This applies to any nested repository, including linked worktrees created under `.claude/worktrees/`. Changes inside a nested repository belong to that repository, not the one being synchronized.
+
 ### Log rotation limitation
 
 The CLI and daemon use separate rotating log files. Multiple CLI processes, such as a running `watch` command and a manual `sync`, still write to the same `git-auto-sync.log` file. The rotation library does not coordinate across processes, so concurrent CLI processes may exceed the configured rotation size or lose log records during rotation.
