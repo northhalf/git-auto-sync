@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/gen2brain/beeep"
+	"github.com/northhalf/git-auto-sync/assets"
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/ztrue/tracerr"
 )
@@ -39,7 +40,7 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	if err := rebase(logger, repoConfig); err != nil {
 		if errors.Is(err, errRebaseFailed) {
 			repoPath := repoConfig.RepoPath
-			alertErr := beeep.Alert("Git Auto Sync - Conflict", "Could not rebase for - "+repoPath, "assets/warning.png")
+			alertErr := beeep.Alert("Git Auto Sync - Conflict", "Could not rebase for - "+repoPath, assets.WarningPNG)
 			if alertErr != nil {
 				logger.Error("send rebase conflict alert failed", "error", alertErr)
 				return tracerr.Wrap(alertErr)
