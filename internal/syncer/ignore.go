@@ -14,8 +14,11 @@ import (
 
 // @description    Determines whether a file should be ignored.
 //
-// ShouldIgnoreFile reports whether a path is an editor temporary file, Git metadata, an empty
-// file, or matched by Git ignore and exclude rules.
+// ShouldIgnoreFile reports whether a path should be excluded from watching and commits. Files tracked
+// in the Git index are always eligible and bypass every other check. Untracked paths are excluded
+// when they are editor temporary files, untracked hidden paths, Git metadata, empty files, or matched
+// by Git ignore and exclude rules. Git control files, .github contents, and files ending in .example
+// remain eligible for the remaining checks.
 //
 // @param           repoPath  "path to the repository root"
 //
@@ -33,6 +36,20 @@ func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 		filePath = path.Join(repoPath, filePath)
 	}
 
+	relativePath, err := filepath.Rel(repoPath, filePath)
+	if err != nil {
+		return false, tracerr.Wrap(err)
+	}
+	relativePath = filepath.ToSlash(relativePath)
+
+	tracked, err := isTracked(repoPath, relativePath)
+	if err != nil {
+		return false, tracerr.Wrap(err)
+	}
+	if tracked {
+		return false, nil
+	}
+
 	fileName := filepath.Base(filePath)
 	var isTempFile = strings.HasSuffix(fileName, ".swp") || // vim
 		strings.HasPrefix(fileName, "~") || // emacs
@@ -42,13 +59,27 @@ func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 		return true, nil
 	}
 
-	relativePath, err := filepath.Rel(repoPath, filePath)
-	if err != nil {
-		return false, tracerr.Wrap(err)
-	}
-	relativePath = filepath.ToSlash(relativePath)
-
 	if strings.HasPrefix(relativePath, ".git/") {
+		return true, nil
+	}
+
+	pathParts := strings.Split(relativePath, "/")
+	hidden := false
+	for _, part := range pathParts {
+		if part != "." && part != ".." && strings.HasPrefix(part, ".") {
+			hidden = true
+			break
+		}
+	}
+
+	hiddenException := pathParts[0] == ".github" ||
+		fileName == ".gitignore" ||
+		fileName == ".gitattributes" ||
+		fileName == ".gitmodules" ||
+		fileName == ".mailmap" ||
+		strings.HasSuffix(fileName, ".example")
+	outsideRepo := relativePath == ".." || strings.HasPrefix(relativePath, "../")
+	if hidden && !hiddenException && !outsideRepo {
 		return true, nil
 	}
 
@@ -61,6 +92,37 @@ func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 	}
 
 	return isFileIgnoredByGit(repoPath, filePath)
+}
+
+// @description    Reports whether a path is tracked in the Git index.
+//
+// isTracked opens the repository and searches the index for the repository-relative path. The path
+// must already use forward slashes, as produced by filepath.ToSlash.
+//
+// @param           repoPath      "path to the repository root"
+//
+// @param           relativePath  "repository-relative path using forward slashes"
+//
+// @return          bool          "true when an index entry matches the path"
+//
+// @return          error         "nil on success, or an error opening the repository or reading the index"
+func isTracked(repoPath string, relativePath string) (bool, error) {
+	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return false, tracerr.Wrap(err)
+	}
+
+	index, err := repo.Storer.Index()
+	if err != nil {
+		return false, tracerr.Wrap(err)
+	}
+
+	for _, entry := range index.Entries {
+		if entry.Name == relativePath {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // @description    Matches a file against Git ignore rules.
