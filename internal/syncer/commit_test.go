@@ -114,6 +114,33 @@ func Test_LFSNoChanges(t *testing.T) {
 	assert.Equal(t, head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
 }
 
+// @description    Verifies that an LFS pointer left in the working tree is not committed.
+//
+// Test_LFSPointerInWorktree verifies that a Git LFS file whose working-tree content is the pointer
+// text (as a CI checkout without an LFS fetch or a GIT_LFS_SKIP_SMUDGE environment leaves it) is
+// treated as unchanged: git status reports it as modified but git add stages nothing, so commit
+// skips rather than failing with "nothing to commit".
+//
+// @param           t   "test handle used for fixture setup and assertions"
+func Test_LFSPointerInWorktree(t *testing.T) {
+	repoConfig := PrepareFixture(t, "lfs_no_changes")
+
+	// Replace the smudged binary with the pointer text stored in the index, mirroring a working
+	// tree populated by an LFS-less checkout.
+	pointer, err := exec.Command("git", "-C", repoConfig.RepoPath, "cat-file", "-p", ":image.bin").Output()
+	assert.NilError(t, err)
+	assert.NilError(t, os.WriteFile(filepath.Join(repoConfig.RepoPath, "image.bin"), pointer, 0o644))
+
+	err = commit(slog.Default(), repoConfig)
+	assert.NilError(t, err)
+
+	r, err := git.PlainOpen(repoConfig.RepoPath)
+	assert.NilError(t, err)
+	head, err := r.Head()
+	assert.NilError(t, err)
+	assert.Equal(t, head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
+}
+
 // @description    Verifies commits for untracked files.
 //
 // Test_NewFile verifies that committing an untracked file creates a new HEAD commit with the

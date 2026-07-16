@@ -15,7 +15,9 @@ import (
 //
 // commit reads the working-tree status with git status, skips nested Git repositories and ignored
 // files, stages eligible paths with git add, sorts their status lines, and creates a commit with
-// those lines as its message. It logs a skip when no eligible changes exist.
+// those lines as its message. It logs a skip when no eligible changes exist, or when staging
+// produced no index changes because a content filter (such as Git LFS with a pointer-only working
+// tree under GIT_LFS_SKIP_SMUDGE) made git status report a change that git add did not stage.
 //
 // @param           logger      "repository-scoped logger"
 //
@@ -71,6 +73,22 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 
 	if !hasChanges {
 		logger.Info("commit skipped", "reason", "no eligible changes")
+		return nil
+	}
+
+	// Confirm that staging actually wrote changes to the index before committing. Content filters
+	// can make git status report a file as modified while git add stages nothing: a Git LFS file
+	// left as a pointer in the working tree (for example under GIT_LFS_SKIP_SMUDGE or a CI checkout
+	// without an LFS fetch) reports as modified, but git add produces no staged change and git
+	// commit would then fail with "nothing to commit". Re-checking the staged index turns that
+	// failure into a clean skip.
+	stagedOut, err := gitCommand(logger, repoConfig, []string{"diff", "--cached", "--name-only", "-z"})
+	if err != nil {
+		logger.Error("commit failed", "operation", "check staged changes", "error", err)
+		return tracerr.Wrap(err)
+	}
+	if len(stagedOut.String()) == 0 {
+		logger.Info("commit skipped", "reason", "no staged changes")
 		return nil
 	}
 
