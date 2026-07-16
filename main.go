@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -62,7 +63,7 @@ func main() {
 						return tracerr.Wrap(err)
 					}
 
-					return watcher.WatchForChanges(logging.WithRepo(repoPath), cfg)
+					return watcher.WatchForChanges(context.Background(), logging.WithRepo(repoPath), cfg)
 				},
 			},
 			{

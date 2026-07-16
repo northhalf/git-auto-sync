@@ -78,12 +78,13 @@ func daemonList(ctx *cli.Context) error {
 // @description    Adds a repository to the daemon.
 //
 // daemonAdd validates a repository, adds it to the daemon configuration when absent, writes the
-// configuration, and enables the user service. Enabling may stop a running service before
-// installing or reinstalling and starting it.
+// configuration, and ensures the daemon service is running. A running daemon picks up the new
+// repository through its configuration reload poller; a stopped or uninstalled daemon is started
+// or installed.
 //
 // @param           ctx    "CLI context containing the repository path"
 //
-// @return          error  "nil on success, or an error validating, persisting, or enabling the service"
+// @return          error  "nil on success, or an error validating, persisting, or starting the service"
 func daemonAdd(ctx *cli.Context) error {
 	repoPath := ctx.Args().First()
 	repoPath, err := filepath.Abs(repoPath)
@@ -117,7 +118,7 @@ func daemonAdd(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	err = s.Enable()
+	err = s.EnsureRunning()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}

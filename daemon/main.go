@@ -3,13 +3,12 @@ package main
 import (
 	"log/slog"
 	"os"
-	"sync"
+	"time"
 
 	"github.com/kardianos/service"
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/daemonservice"
 	"github.com/northhalf/git-auto-sync/internal/logging"
-	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
 type Daemon struct{}
@@ -27,27 +26,47 @@ func (d *Daemon) Start(s service.Service) error {
 	return nil
 }
 
-// @description    Runs all configured repository watchers.
+// @description    Runs and reconciles repository watchers against the daemon configuration.
 //
-// run reads the daemon configuration, starts one watcher goroutine per repository, and blocks
-// until all watchers stop. It panics if configuration loading fails.
+// run reads the daemon configuration, starts a watcher per repository, then polls the
+// configuration file for changes and reconciles the running watchers: added repositories are
+// started and removed repositories self-terminate. It panics if the initial configuration load
+// fails and logs, rather than panics on, subsequent read errors.
 func (d *Daemon) run() {
+	mgr := newWatcherManager()
+
 	daemonConfig, err := config.ReadDaemonConfig()
 	if err != nil {
 		panic(err)
 	}
+	mgr.reconcile(daemonConfig.Repos, daemonConfig.Envs)
 
-	var wg sync.WaitGroup
-
-	for _, repoPath := range daemonConfig.Repos {
-		wg.Add(1)
-
-		logger := logging.WithRepo(repoPath)
-		logger.Info("monitoring repo")
-		go watchForChanges(&wg, logger, repoPath, daemonConfig.Envs)
+	lastMod, err := config.DaemonConfigModTime()
+	if err != nil {
+		panic(err)
 	}
 
-	wg.Wait()
+	ticker := time.NewTicker(configPollInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		mod, err := config.DaemonConfigModTime()
+		if err != nil {
+			slog.Error("read daemon config mtime failed", "error", err)
+			continue
+		}
+
+		if !mod.Equal(lastMod) {
+			lastMod = mod
+			daemonConfig, err = config.ReadDaemonConfig()
+			if err != nil {
+				slog.Error("read daemon config failed", "error", err)
+				continue
+			}
+		}
+
+		mgr.reconcile(daemonConfig.Repos, daemonConfig.Envs)
+	}
 }
 
 // @description    Stop returns immediately without stopping watcher goroutines.
@@ -86,31 +105,3 @@ func main() {
 		_ = logger.Error("RunService", err)
 	}
 }
-
-// FIXME: pass some kind of channel which tells this when to close!
-// @description    Runs one repository watcher.
-//
-// watchForChanges builds repository configuration, applies the daemon's environment entries, runs
-// the watcher, logs setup or watcher errors, and marks its wait-group task complete on return.
-//
-// @param           wg        "wait group tracking the repository watcher"
-//
-// @param           logger    "repository-scoped logger"
-//
-// @param           repoPath  "path to the repository to watch"
-//
-// @param           env       "daemon-level environment entries applied to the repository configuration"
-func watchForChanges(wg *sync.WaitGroup, logger *slog.Logger, repoPath string, env []string) {
-	defer wg.Done()
-
-	cfg, err := config.NewRepoConfig(repoPath)
-	if err != nil {
-		logger.Error("build repo config failed", "error", err)
-		return
-	}
-	cfg.Env = append(cfg.Env, env...)
-
-	_ = watcher.WatchForChanges(logger, cfg)
-}
-
-// FIXME: Handle operating system signal which tells it to reload the config

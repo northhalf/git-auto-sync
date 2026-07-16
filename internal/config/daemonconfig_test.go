@@ -55,3 +55,24 @@ func Test_ReadEmptyV1(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, len(c.Repos) == 0)
 }
+
+// @description    Verifies the daemon configuration modification time.
+//
+// Test_DaemonConfigModTime verifies that the modification time is the zero time when no
+// configuration file exists and a non-zero time after a configuration is written.
+//
+// @param           t   "test handle used for isolated configuration setup and assertions"
+func Test_DaemonConfigModTime(t *testing.T) {
+	setup(t, "ModTime")
+
+	mod, err := DaemonConfigModTime()
+	assert.NilError(t, err)
+	assert.Assert(t, mod.IsZero(), "expected zero mod time when config file is absent")
+
+	err = WriteDaemonConfig(&DaemonConfig{Repos: []string{"/repo"}})
+	assert.NilError(t, err)
+
+	mod, err = DaemonConfigModTime()
+	assert.NilError(t, err)
+	assert.Assert(t, !mod.IsZero(), "expected non-zero mod time after writing config")
+}

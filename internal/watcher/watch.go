@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -24,14 +25,17 @@ type AwakeNotifier interface {
 // WatchForChanges performs an initial sync, then watches recursive filesystem events while a
 // goroutine requests further syncs from eligible events, a periodic ticker, and platform wake
 // notifications. Sync errors are already logged by the failing synchronization stage and are not
-// duplicated here. Normal operation loops indefinitely.
+// duplicated here. Normal operation loops until ctx is canceled, at which point the filesystem
+// watcher and tickers are stopped and the function returns nil.
+//
+// @param           ctx     "context whose cancellation stops the watcher and releases its resources"
 //
 // @param           logger  "repository-scoped logger"
 //
 // @param           cfg     "repository configuration and watcher timing values"
 //
 // @return          error   "an error from initial sync, watcher setup, or filesystem event inspection"
-func WatchForChanges(logger *slog.Logger, cfg config.RepoConfig) error {
+func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoConfig) error {
 	logger.Debug("starting watcher")
 
 	repoPath := cfg.RepoPath
@@ -39,8 +43,14 @@ func WatchForChanges(logger *slog.Logger, cfg config.RepoConfig) error {
 		return tracerr.Wrap(err)
 	}
 
+	// Derive a cancellable context so the inner goroutine stops when WatchForChanges returns,
+	// including the error-return paths that previously leaked it.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	notifyFilteredChannel := make(chan bool, 100)
 	syncTicker := time.NewTicker(cfg.SyncInterval)
+	defer syncTicker.Stop()
 
 	// Filtered events
 	go func() {
@@ -58,8 +68,18 @@ func WatchForChanges(logger *slog.Logger, cfg config.RepoConfig) error {
 
 		for {
 			select {
+			case <-ctx.Done():
+				return
+
 			case <-notifyFilteredChannel:
-				time.Sleep(cfg.FSLag)
+				// Wait for filesystem writes to settle, but remain cancellable while waiting.
+				lag := time.NewTimer(cfg.FSLag)
+				select {
+				case <-ctx.Done():
+					lag.Stop()
+					return
+				case <-lag.C:
+				}
 
 				if err := syncer.AutoSync(logger, cfg); err != nil {
 					os.Exit(1)
@@ -85,17 +105,26 @@ func WatchForChanges(logger *slog.Logger, cfg config.RepoConfig) error {
 
 	logger.Info("watcher started")
 	for {
-		ei := <-notifyChannel
-		ignore, err := syncer.ShouldIgnoreFile(repoPath, ei.Path())
-		if err != nil {
-			logger.Error("watcher failed", "operation", "inspect filesystem event", "path", ei.Path(), "error", err)
-			return tracerr.Wrap(err)
-		}
-		if ignore {
-			logger.Debug("filesystem event skipped", "path", ei.Path())
-			continue
-		}
+		select {
+		case <-ctx.Done():
+			return nil
 
-		notifyFilteredChannel <- true
+		case ei := <-notifyChannel:
+			ignore, err := syncer.ShouldIgnoreFile(repoPath, ei.Path())
+			if err != nil {
+				logger.Error("watcher failed", "operation", "inspect filesystem event", "path", ei.Path(), "error", err)
+				return tracerr.Wrap(err)
+			}
+			if ignore {
+				logger.Debug("filesystem event skipped", "path", ei.Path())
+				continue
+			}
+
+			select {
+			case notifyFilteredChannel <- true:
+			case <-ctx.Done():
+				return nil
+			}
+		}
 	}
 }

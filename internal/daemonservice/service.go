@@ -113,6 +113,32 @@ func (srv Service) Enable() error {
 	return nil
 }
 
+// @description    Starts the daemon service only when it is not already running.
+//
+// EnsureRunning starts the daemon when it is installed but stopped, and installs and starts it
+// when it is not installed. When the service is already running, it does nothing so that a
+// running daemon picks up configuration changes through its reload poller instead of being
+// restarted.
+//
+// @return          error  "nil on success or when already running, or an error querying, installing, or starting the service"
+func (srv Service) EnsureRunning() error {
+	status, err := srv.Service.Status()
+	if err != nil {
+		if !strings.Contains(err.Error(), "the service is not installed") {
+			return tracerr.Wrap(err)
+		}
+		// Not installed: install and start via Enable, which stops nothing here.
+		return srv.Enable()
+	}
+
+	if status == service.StatusRunning {
+		return nil
+	}
+
+	fmt.Println("Starting git-auto-sync-daemon")
+	return tracerr.Wrap(srv.Service.Start())
+}
+
 // @description    Disable stops and uninstalls the daemon user service.
 //
 // @return          error  "nil on success, or an error stopping or uninstalling the service"
