@@ -66,15 +66,32 @@ func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 // @description    Matches a file against Git ignore rules.
 //
 // isFileIgnoredByGit checks a path against repository ignore patterns and worktree exclude rules.
+// Absolute and repository-relative paths are normalized into matcher path components. Paths outside
+// the repository are rejected.
 //
 // @param           repoPath  "path to the repository root"
 //
-// @param           filePath  "path to match against Git ignore rules"
+// @param           filePath  "absolute or repository-relative path to match against Git ignore rules"
 //
 // @return          bool      "true when a Git ignore or exclude rule matches the path"
 //
-// @return          error     "nil on success, or an error opening the repository or reading rules"
+// @return          error     "nil on success, or an error normalizing the path or reading Git rules"
 func isFileIgnoredByGit(repoPath string, filePath string) (bool, error) {
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(repoPath, filePath)
+	}
+
+	relativePath, err := filepath.Rel(repoPath, filePath)
+	if err != nil {
+		return false, tracerr.Wrap(err)
+	}
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+		return false, errors.New("file path is outside repository")
+	}
+	if relativePath == "." {
+		return false, nil
+	}
+
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		return false, tracerr.Wrap(err)
@@ -93,7 +110,8 @@ func isFileIgnoredByGit(repoPath string, filePath string) (bool, error) {
 	patterns = append(patterns, w.Excludes...)
 	m := gitignore.NewMatcher(patterns)
 
-	return m.Match([]string{filePath}, false), err
+	relativePath = filepath.ToSlash(relativePath)
+	return m.Match(strings.Split(relativePath, "/"), false), nil
 }
 
 // @description    Checks whether an existing file is empty.
