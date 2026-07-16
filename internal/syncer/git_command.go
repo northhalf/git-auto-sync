@@ -2,10 +2,10 @@ package syncer
 
 import (
 	"bytes"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
@@ -15,9 +15,9 @@ import (
 // @description    Runs a Git subprocess.
 //
 // gitCommand runs the configured Git executable in the repository directory with the resolved
-// environment, captures standard output and standard error, warns about an omitted SSH agent
-// socket, and includes command details in returned errors. Structured log attributes identify the
-// operation without separately exposing environment values, command output, or remote URLs.
+// environment, captures standard output and standard error, and includes command details in
+// returned errors. Structured log attributes identify the operation without separately exposing
+// environment values, command output, or remote URLs.
 //
 // @param           logger       "repository-scoped logger"
 //
@@ -55,14 +55,16 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 	statusCmd.Env = toEnvString(repoConfig)
 	err := statusCmd.Run()
 
-	if hasEnvVariable(os.Environ(), "SSH_AUTH_SOCK") && !hasEnvVariable(repoConfig.Env, "SSH_AUTH_SOCK") {
-		fmt.Println("WARNING: SSH_AUTH_SOCK env variable isn't being passed")
-		logger.Warn("SSH_AUTH_SOCK env variable isn't being passed")
-	}
-
 	if err != nil {
 		fullCmd := cmd + " " + strings.Join(gitArgs, " ")
-		return outb, tracerr.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, statusCmd.Env, outb.String(), errb.String())
+		// Expose only environment keys, not values, so secrets such as tokens or agent sockets
+		// passed through repoConfig.Env or the inherited parent environment never reach logs.
+		keys := make([]string, 0, len(statusCmd.Env))
+		for _, e := range statusCmd.Env {
+			k, _, _ := strings.Cut(e, "=")
+			keys = append(keys, k)
+		}
+		return outb, tracerr.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, keys, outb.String(), errb.String())
 	}
 
 	logger.Debug("git command completed", "operation", operation)
@@ -71,38 +73,24 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 
 // @description    Builds the Git subprocess environment.
 //
-// toEnvString builds the subprocess environment from configured entries and the current process
-// HOME value.
+// toEnvString inherits the full parent environment so Git receives SSH_AUTH_SOCK, PATH,
+// XDG_CONFIG_HOME, GIT_* and any other variable it relies on, then layers explicit per-repo
+// entries on top so configured values override inherited ones. Entries are sorted for stable
+// command-error output.
 //
 // @param           repoConfig  "repository configuration containing explicit environment entries"
 //
 // @return          []string    "environment entries for the Git subprocess"
 func toEnvString(repoConfig config.RepoConfig) []string {
-	vals := append([]string(nil), repoConfig.Env...)
-
-	for _, s := range os.Environ() {
-		k, _, _ := strings.Cut(s, "=")
-		if k == "HOME" {
-			vals = append(vals, s)
-		}
+	env := envMapFromSlice(os.Environ())
+	for k, v := range envMapFromSlice(repoConfig.Env) {
+		env[k] = v
 	}
 
-	return vals
-}
-
-// @description    hasEnvVariable reports whether an environment entry has the requested key.
-//
-// @param           all   "environment entries in key=value form"
-//
-// @param           name  "environment variable name to find"
-//
-// @return          bool  "true when an entry with the requested name exists"
-func hasEnvVariable(all []string, name string) bool {
-	for _, s := range all {
-		k, _, _ := strings.Cut(s, "=")
-		if k == name {
-			return true
-		}
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		out = append(out, k+"="+v)
 	}
-	return false
+	sort.Strings(out)
+	return out
 }

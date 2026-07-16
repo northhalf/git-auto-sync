@@ -44,7 +44,7 @@ func (d *Daemon) run() {
 
 		logger := logging.WithRepo(repoPath)
 		logger.Info("monitoring repo")
-		go watchForChanges(&wg, logger, repoPath)
+		go watchForChanges(&wg, logger, repoPath, daemonConfig.Envs)
 	}
 
 	wg.Wait()
@@ -90,15 +90,17 @@ func main() {
 // FIXME: pass some kind of channel which tells this when to close!
 // @description    Runs one repository watcher.
 //
-// watchForChanges builds repository configuration, runs the watcher, logs setup or watcher errors,
-// and marks its wait-group task complete on return.
+// watchForChanges builds repository configuration, applies the daemon's environment entries, runs
+// the watcher, logs setup or watcher errors, and marks its wait-group task complete on return.
 //
 // @param           wg        "wait group tracking the repository watcher"
 //
 // @param           logger    "repository-scoped logger"
 //
 // @param           repoPath  "path to the repository to watch"
-func watchForChanges(wg *sync.WaitGroup, logger *slog.Logger, repoPath string) {
+//
+// @param           env       "daemon-level environment entries applied to the repository configuration"
+func watchForChanges(wg *sync.WaitGroup, logger *slog.Logger, repoPath string, env []string) {
 	defer wg.Done()
 
 	cfg, err := config.NewRepoConfig(repoPath)
@@ -106,6 +108,7 @@ func watchForChanges(wg *sync.WaitGroup, logger *slog.Logger, repoPath string) {
 		logger.Error("build repo config failed", "error", err)
 		return
 	}
+	cfg.Env = append(cfg.Env, env...)
 
 	_ = watcher.WatchForChanges(logger, cfg)
 }

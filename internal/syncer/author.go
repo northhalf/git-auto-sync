@@ -52,6 +52,7 @@ func ensureGitAuthor(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	authorEnvLogger = logger
 	defer func() { authorEnvLogger = nil }()
 
+	// Replace system environment variables with repository environment variables
 	restore := setAuthorEnv(envMap)
 	defer func() {
 		if err := restore(); err != nil {
