@@ -217,6 +217,10 @@ func daemonList(ctx *cli.Context) error {
 
 	fmt.Println("daemon:", daemonServiceStatus())
 	now := time.Now()
+	if len(settings.Repos) == 0 {
+		fmt.Println("No repository be added")
+		return nil
+	}
 	for _, repoPath := range settings.Repos {
 		fmt.Printf("%s  -  %s\n", repoPath, repoStatusText(repoPath, state, now))
 	}

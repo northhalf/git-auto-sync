@@ -50,6 +50,10 @@ func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
 	}
 	exDirPath := filepath.Dir(ex)
 	executablePath := filepath.Join(exDirPath, "git-auto-sync-daemon")
+	if runtime.GOOS == "windows" {
+		// Windows services require the .exe suffix in ImagePath; CreateProcess does not append it.
+		executablePath += ".exe"
+	}
 
 	deps := []string{}
 	if runtime.GOOS == "linux" {
