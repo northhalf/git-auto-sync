@@ -3,12 +3,13 @@ package syncer
 import "errors"
 
 const (
-	syncStageAuthor = "author"
-	syncStageCommit = "commit"
-	syncStageFetch  = "fetch"
-	syncStageRebase = "rebase"
-	syncStageAlert  = "alert"
-	syncStagePush   = "push"
+	syncStageAuthor  = "author"
+	syncStageCommit  = "commit"
+	syncStageFetch   = "fetch"
+	syncStageCompare = "compare"
+	syncStageRebase  = "rebase"
+	syncStageAlert   = "alert"
+	syncStagePush    = "push"
 )
 
 type syncError struct {

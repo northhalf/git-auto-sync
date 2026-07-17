@@ -26,6 +26,7 @@ func Test_SyncErrorClassification(t *testing.T) {
 		{stage: "author"},
 		{stage: "commit"},
 		{stage: "fetch", remote: true},
+		{stage: "compare"},
 		{stage: "rebase"},
 		{stage: "alert"},
 		{stage: "push", remote: true},
