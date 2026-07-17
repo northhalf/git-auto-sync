@@ -26,8 +26,10 @@ func (cliDaemon) Stop(service.Service) error { return nil }
 
 // @description    Prints daemon status and repositories.
 //
-// daemonStatus prints the service status and every repository in the daemon configuration,
-// returning an error if either cannot be read.
+// daemonStatus queries the service status, prints a message for running, stopped, and not-installed
+// states, then prints every repository in the daemon configuration. A not-installed service is
+// reported as a normal status; other service or configuration errors are returned for the CLI to
+// surface.
 //
 // @param           ctx    "CLI context for the daemon status command"
 //
@@ -38,9 +40,20 @@ func daemonStatus(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	err = s.Status()
-	if err != nil {
+	status, err := s.Status()
+	switch {
+	case errors.Is(err, daemonservice.ErrNotInstalled):
+		fmt.Println("git-auto-sync-daemon is NOT installed!")
+	case err != nil:
 		return tracerr.Wrap(err)
+	case status == service.StatusRunning:
+		fmt.Println("git-auto-sync-daemon is Running!")
+	case status == service.StatusStopped:
+		fmt.Println("git-auto-sync-daemon is NOT Running!")
+	case status == service.StatusUnknown:
+		// No user-facing message for an unknown status.
+	default:
+		fmt.Println("git-auto-sync-daemon status is Unknown. How mysterious!")
 	}
 
 	config, err := cfg.ReadDaemonConfig()

@@ -177,6 +177,7 @@ func main() {
 	err := app.Run(os.Args)
 	if err != nil {
 		slog.Error("run failed", "error", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
