@@ -12,28 +12,32 @@ import (
 // @description    Verifies basic Git ignore matching.
 //
 // Test_SimpleIgnore verifies that Git ignore rules classify 1.txt as ignored and 2.md as eligible
-// for processing.
+// for processing, through the cached IgnoreChecker matcher.
 //
 // @param           t   "test handle used for fixture setup and ignore assertions"
 func Test_SimpleIgnore(t *testing.T) {
 	repoPath := PrepareFixture(t, "ignore").RepoPath
 
-	ignore, err := isFileIgnoredByGit(repoPath, "1.txt")
+	checker, err := NewIgnoreChecker(repoPath)
+	assert.NilError(t, err)
+
+	ignore, err := checker.ShouldIgnore("1.txt")
 	assert.NilError(t, err)
 	assert.Equal(t, ignore, true)
 
-	ignore, err = isFileIgnoredByGit(repoPath, "2.md")
+	ignore, err = checker.ShouldIgnore("2.md")
 	assert.NilError(t, err)
 	assert.Equal(t, ignore, false)
 }
 
 // @description    Verifies Git ignore matching for supported path forms.
 //
-// Test_IsFileIgnoredByGitPathForms verifies that absolute paths and nested repository-relative paths
-// are converted into repository-relative components before matching ignore patterns.
+// Test_IgnoreMatcherPathForms verifies that absolute paths and nested repository-relative paths
+// are converted into repository-relative components before matching ignore patterns, through the
+// cached IgnoreChecker matcher.
 //
 // @param           t   "test handle used for fixture setup and path-form assertions"
-func Test_IsFileIgnoredByGitPathForms(t *testing.T) {
+func Test_IgnoreMatcherPathForms(t *testing.T) {
 	repoPath := PrepareFixture(t, "ignore").RepoPath
 	tests := []struct {
 		name     string
@@ -44,9 +48,12 @@ func Test_IsFileIgnoredByGitPathForms(t *testing.T) {
 		{name: "nested absolute", filePath: filepath.Join(repoPath, "nested", "ignored.txt")},
 	}
 
+	checker, err := NewIgnoreChecker(repoPath)
+	assert.NilError(t, err)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ignore, err := isFileIgnoredByGit(repoPath, tt.filePath)
+			ignore, err := checker.ShouldIgnore(tt.filePath)
 			assert.NilError(t, err)
 			assert.Equal(t, ignore, true)
 		})
@@ -55,11 +62,11 @@ func Test_IsFileIgnoredByGitPathForms(t *testing.T) {
 
 // @description    Verifies rejection of paths outside the repository.
 //
-// Test_IsFileIgnoredByGitRejectsOutsidePaths verifies that relative and absolute paths resolving
-// outside the repository return an error instead of being passed to the Git ignore matcher.
+// Test_ShouldIgnoreRejectsOutsidePaths verifies that relative and absolute paths resolving outside
+// the repository return an error instead of being passed to the Git ignore matcher.
 //
 // @param           t   "test handle used for fixture setup and boundary assertions"
-func Test_IsFileIgnoredByGitRejectsOutsidePaths(t *testing.T) {
+func Test_ShouldIgnoreRejectsOutsidePaths(t *testing.T) {
 	repoPath := PrepareFixture(t, "ignore").RepoPath
 	tests := []struct {
 		name     string
@@ -69,9 +76,12 @@ func Test_IsFileIgnoredByGitRejectsOutsidePaths(t *testing.T) {
 		{name: "absolute", filePath: filepath.Join(filepath.Dir(repoPath), "outside.txt")},
 	}
 
+	checker, err := NewIgnoreChecker(repoPath)
+	assert.NilError(t, err)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := isFileIgnoredByGit(repoPath, tt.filePath)
+			_, err := checker.ShouldIgnore(tt.filePath)
 			assert.ErrorContains(t, err, "outside repository")
 		})
 	}

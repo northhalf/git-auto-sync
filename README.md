@@ -85,7 +85,7 @@ Git Auto Sync uses rebase, not merge. If a rebase conflict occurs, it aborts the
 
 ### Ignored files
 
-Files already tracked by Git are always synced and bypass every ignore rule. For untracked paths, any path with a dot-prefixed component is excluded from commits and filesystem monitoring, unless it is `.github/` content, a Git control file (`.gitignore`, `.gitattributes`, `.gitmodules`, or `.mailmap`) at any depth, or a file whose name ends in `.example`. Empty files, Git-ignored files, Git metadata, and editor swap/backup files (e.g., Vim, Emacs) stay excluded even when an exception applies.
+Files already tracked by Git are always synced and bypass every ignore rule. For untracked paths, any path with a dot-prefixed component is excluded from commits and filesystem monitoring, unless it is `.github/` content, a Git control file (`.gitignore`, `.gitattributes`, `.gitmodules`, `.gitkeep`, or `.mailmap`) at any depth, or a file whose name ends in `.example`. Empty files(other than `.gitkeep`), Git-ignored files, Git metadata, and editor swap/backup files (e.g., Vim, Emacs) stay excluded even when an exception applies.
 
 ### Nested repositories
 

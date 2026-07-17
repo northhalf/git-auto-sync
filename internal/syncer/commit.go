@@ -35,6 +35,12 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		return tracerr.Wrap(err)
 	}
 
+	checker, err := NewIgnoreChecker(repoPath)
+	if err != nil {
+		logger.Error("commit failed", "operation", "build ignore checker", "error", err)
+		return tracerr.Wrap(err)
+	}
+
 	hasChanges := false
 	commitMsg := []string{}
 	for _, record := range strings.Split(statusOut.String(), "\x00") {
@@ -50,7 +56,7 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 			continue
 		}
 
-		ignore, err := ShouldIgnoreFile(repoPath, filePath)
+		ignore, err := checker.ShouldIgnore(filePath)
 		if err != nil {
 			logger.Error("commit failed", "operation", "check ignored file", "path", filePath, "error", err)
 			return tracerr.Wrap(err)
