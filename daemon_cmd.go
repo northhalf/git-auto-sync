@@ -18,10 +18,23 @@ import (
 // cliDaemon satisfies the service interface for CLI service management without starting a process.
 type cliDaemon struct{}
 
-// Start satisfies the service interface without starting a daemon process.
+// @description    Satisfies the service interface without starting a daemon process.
+//
+// Start is a no-op used by CLI service management, which builds the service definition without
+// running a daemon process.
+//
+// @param           service.Service  "service instance requesting the daemon start"
+//
+// @return          error            "always nil"
 func (cliDaemon) Start(service.Service) error { return nil }
 
-// Stop satisfies the service interface without stopping a daemon process.
+// @description    Satisfies the service interface without stopping a daemon process.
+//
+// Stop is a no-op used by CLI service management, which never starts a daemon process to stop.
+//
+// @param           service.Service  "service instance requesting the daemon stop"
+//
+// @return          error            "always nil"
 func (cliDaemon) Stop(service.Service) error { return nil }
 
 // @description    Prints daemon status and repositories.
@@ -56,13 +69,13 @@ func daemonStatus(ctx *cli.Context) error {
 		fmt.Println("git-auto-sync-daemon status is Unknown. How mysterious!")
 	}
 
-	config, err := cfg.ReadDaemonConfig()
+	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
 	fmt.Println("Monitoring - ")
-	for _, repoPath := range config.Repos {
+	for _, repoPath := range settings.Repos {
 		fmt.Println("  ", repoPath)
 	}
 
@@ -77,12 +90,12 @@ func daemonStatus(ctx *cli.Context) error {
 //
 // @return          error  "nil on success, or an error reading the configuration"
 func daemonList(ctx *cli.Context) error {
-	config, err := cfg.ReadDaemonConfig()
+	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
-	for _, repoPath := range config.Repos {
+	for _, repoPath := range settings.Repos {
 		fmt.Println(repoPath)
 	}
 	return nil
@@ -110,18 +123,18 @@ func daemonAdd(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	config, err := cfg.ReadDaemonConfig()
+	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
-	if slices.Contains(config.Repos, repoPath) {
+	if slices.Contains(settings.Repos, repoPath) {
 		fmt.Println("The Daemon is already monitoring " + repoPath)
 	} else {
-		config.Repos = append(config.Repos, repoPath)
+		settings.Repos = append(settings.Repos, repoPath)
 	}
 
-	err = cfg.WriteDaemonConfig(config)
+	err = cfg.WriteGlobalSettings(settings)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
@@ -159,13 +172,13 @@ func daemonRm(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	config, err := cfg.ReadDaemonConfig()
+	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
 	pos := -1
-	for i, rp := range config.Repos {
+	for i, rp := range settings.Repos {
 		if rp == repoPath {
 			pos = i
 			break
@@ -177,13 +190,13 @@ func daemonRm(ctx *cli.Context) error {
 		return tracerr.Errorf("%w - %s", err, repoPath)
 	}
 
-	config.Repos = append(config.Repos[:pos], config.Repos[pos+1:]...)
-	err = cfg.WriteDaemonConfig(config)
+	settings.Repos = append(settings.Repos[:pos], settings.Repos[pos+1:]...)
+	err = cfg.WriteGlobalSettings(settings)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
-	if len(config.Repos) == 0 {
+	if len(settings.Repos) == 0 {
 		s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 		if err != nil {
 			return tracerr.Wrap(err)
@@ -216,13 +229,13 @@ func daemonEnv(ctx *cli.Context) error {
 		}
 	}
 
-	config, err := cfg.ReadDaemonConfig()
+	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
-	envMap := make(map[string]string, len(config.Envs)+len(vars))
-	for _, e := range config.Envs {
+	envMap := make(map[string]string, len(settings.Envs)+len(vars))
+	for _, e := range settings.Envs {
 		k, v, _ := strings.Cut(e, "=")
 		envMap[k] = v
 	}
@@ -231,16 +244,16 @@ func daemonEnv(ctx *cli.Context) error {
 		envMap[k] = val
 	}
 
-	config.Envs = make([]string, 0, len(envMap))
+	settings.Envs = make([]string, 0, len(envMap))
 	for k, v := range envMap {
-		config.Envs = append(config.Envs, k+"="+v)
+		settings.Envs = append(settings.Envs, k+"="+v)
 	}
-	err = cfg.WriteDaemonConfig(config)
+	err = cfg.WriteGlobalSettings(settings)
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
-	fmt.Println(strings.Join(config.Envs, "\n"))
+	fmt.Println(strings.Join(settings.Envs, "\n"))
 
 	return nil
 }

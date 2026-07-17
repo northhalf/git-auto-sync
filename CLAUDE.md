@@ -55,19 +55,19 @@ The integration-style tests under `internal/syncer` copy repositories from `inte
 
 The project produces two executables:
 
-- The root `main` package builds `git-auto-sync`, the user-facing CLI. `main.go` defines `watch`, `sync`, `check`, and `daemon` commands. `daemon_cmd.go` implements daemon configuration and service-management subcommands, while `repository.go` contains shared CLI repository validation.
+- The root `main` package builds `git-auto-sync`, the user-facing CLI. `main.go` defines `watch`, `sync`, `check`, `config`, and `daemon` commands. `daemon_cmd.go` implements daemon configuration and service-management subcommands, `config_cmd.go` implements the `git-config`-style settings command, and `repository.go` contains shared CLI repository validation.
 - `daemon/main.go` builds `git-auto-sync-daemon`, the service process. It reads the configured repositories, starts one watcher goroutine per repository, and runs through `kardianos/service`. The service setup expects this binary beside `git-auto-sync`.
 
 Shared behavior is organized under `internal` by responsibility:
 
-1. `internal/config` stores daemon configuration and reads per-repository settings from the Git config section `[auto-sync]`. `syncInterval` controls periodic syncs in seconds, and `exec` selects a Git executable. The CLI can append explicit `--env KEY=VALUE` entries for a manual sync.
+1. `internal/config` stores global settings and per-repository settings. Global settings (`syncInterval`, `debounce`, `gitexec`) live in the platform `config.json`; per-repository settings live in the Git config section `[auto-sync]` with the same key names. Repository settings override global settings, which override defaults (`syncInterval` 60 minutes, `debounce` 10 minutes, `gitexec` `git` via `PATH`). The CLI can append explicit `--env KEY=VALUE` entries for a manual sync.
 2. `internal/syncer` implements `AutoSync`: verify `user.email` and `user.name`, commit eligible worktree changes, fetch every remote, rebase onto the current branch's configured upstream, then push to that upstream.
 3. The syncer uses `go-git` for repository discovery, status, staging, branch configuration, and ignore matching. Mutating and network operations run through the package-private `gitCommand`, which controls the working directory and environment.
 4. A rebase conflict triggers `git rebase --abort`, returns `errRebaseFailed`, and causes `AutoSync` to send a desktop notification. The sync stops before push.
 5. `internal/watcher` implements `WatchForChanges`, combining recursive filesystem notifications, a periodic ticker, and platform-specific wake notifications. It uses `syncer.ShouldIgnoreFile` before requesting another sync.
 6. `internal/logging` configures CLI and daemon logs, while `internal/daemonservice` wraps user-service installation and lifecycle operations.
 
-Daemon state is separate from repository-local settings. `internal/config/daemonconfig.go` stores watched repository paths and daemon environment entries in the platform-local `git-auto-sync/config.json`.
+Daemon state and global settings share one file. `internal/config/settings.go` stores watched repository paths, daemon environment entries, and global synchronization settings in the platform-local `git-auto-sync/config.json`.
 
 `ShouldIgnoreFile` is shared by the watcher and commit path. It excludes editor swap/backup files, `.git` contents, empty files, and files matched by Git ignore/exclude rules. Keep event filtering and commit filtering aligned when changing ignore behavior.
 

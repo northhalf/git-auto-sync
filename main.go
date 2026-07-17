@@ -137,6 +137,7 @@ func main() {
 					return nil
 				},
 			},
+			configCommand(),
 			{
 				Name:    "daemon",
 				Aliases: []string{"d"},

@@ -2,61 +2,48 @@ package config
 
 import (
 	"os"
-	"strconv"
 	"time"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/ztrue/tracerr"
 )
 
+// RepoConfig holds resolved repository synchronization settings.
 type RepoConfig struct {
 	RepoPath     string
 	SyncInterval time.Duration
-	FSLag        time.Duration
+	Debounce     time.Duration
 	GitExec      string
 	Env          []string
 }
 
-// @description    Reads repository synchronization settings.
+// @description    Reads and resolves repository synchronization settings.
 //
-// NewRepoConfig reads repository-local auto-sync settings, applies default timing values, and
-// checks that any configured Git executable path exists.
+// NewRepoConfig reads global settings from config.json and repository-local [auto-sync] settings,
+// merges them with local overriding global overriding defaults, and stats an explicitly configured
+// git executable. An unset gitexec defaults to git and is resolved through PATH at subprocess time.
 //
 // @param           repoPath    "path to the repository root"
 //
 // @return          RepoConfig  "resolved repository configuration"
 //
-// @return          error       "nil on success, or an error reading Git configuration or the executable"
+// @return          error       "nil on success, or an error reading settings or the executable"
 func NewRepoConfig(repoPath string) (RepoConfig, error) {
-	repo, err := git.PlainOpen(repoPath)
+	global, err := ReadGlobalSettings()
 	if err != nil {
 		return RepoConfig{}, tracerr.Wrap(err)
 	}
 
-	config, err := repo.Config()
+	local, err := ReadLocalSettings(repoPath)
 	if err != nil {
 		return RepoConfig{}, tracerr.Wrap(err)
 	}
 
-	autoSyncSection := config.Raw.Section("auto-sync")
+	syncInterval, debounce, gitExec := Resolve(global, local)
 
-	syncInterval := 10 * time.Minute
-	if autoSyncSection.Option("syncInterval") != "" {
-		secondsStr := autoSyncSection.Option("syncInterval")
-		seconds, err := strconv.Atoi(secondsStr)
-		if err != nil {
-			return RepoConfig{}, tracerr.Wrap(err)
-		}
-
-		syncInterval = time.Duration(seconds) * time.Second
-	}
-
-	gitExec := ""
-	if autoSyncSection.Option("exec") != "" {
-		gitExec = autoSyncSection.Option("exec")
-
-		_, err := os.Stat(gitExec)
-		if err != nil {
+	// An explicitly configured gitexec (either scope) is stat-checked, matching existing behavior.
+	// An unset gitexec defaults to git and is resolved through PATH at subprocess time.
+	if (local != nil && local.GitExec != nil) || (global != nil && global.GitExec != nil) {
+		if _, err := os.Stat(gitExec); err != nil {
 			return RepoConfig{}, tracerr.Wrap(err)
 		}
 	}
@@ -64,7 +51,7 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 	return RepoConfig{
 		RepoPath:     repoPath,
 		SyncInterval: syncInterval,
-		FSLag:        10 * time.Minute,
+		Debounce:     debounce,
 		GitExec:      gitExec,
 	}, nil
 }

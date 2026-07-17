@@ -422,7 +422,7 @@ func Test_WatchForChangesKeepsRunningAfterInitialRemoteFailure(t *testing.T) {
 	cfg := config.RepoConfig{
 		RepoPath:     repoPath,
 		SyncInterval: time.Hour,
-		FSLag:        time.Millisecond,
+		Debounce:     time.Millisecond,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

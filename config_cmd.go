@@ -1,0 +1,364 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
+	cfg "github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/urfave/cli/v2"
+	"github.com/ztrue/tracerr"
+)
+
+// configKeys is the set of keys the config command accepts.
+var configKeys = map[string]struct{}{
+	"syncInterval": {},
+	"debounce":     {},
+	"gitexec":      {},
+}
+
+// errConfigUsage signals a config command usage error.
+var errConfigUsage = errors.New("usage: git-auto-sync config [--global|--local] [--get|--list|--unset] <key> [value]")
+
+// @description    Returns the registered config command.
+//
+// configCommand builds the git-config-style command that dispatches get, set, unset, and list
+// operations across --global, --local, and the default effective scope using the internal/config
+// helpers.
+//
+// @return          *cli.Command  "configured config command registered on the CLI app"
+func configCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "config",
+		Usage: "Get, set, or unset git-auto-sync settings",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "global", Usage: "Operate on the global config.json"},
+			&cli.BoolFlag{Name: "local", Usage: "Operate on the repository's .git/config"},
+			&cli.BoolFlag{Name: "get", Usage: "Print the effective value of a key"},
+			&cli.BoolFlag{Name: "list", Aliases: []string{"l"}, Usage: "List all settings"},
+			&cli.BoolFlag{Name: "unset", Aliases: []string{"u"}, Usage: "Remove a key"},
+		},
+		Action: configCmd,
+	}
+}
+
+// @description    Dispatches the config command.
+//
+// configCmd resolves the scope from --global/--local, then dispatches --list, --unset, a two-arg
+// write, or a one-arg read. The default scope is global for writes/unset and the merged effective
+// value for reads/list.
+//
+// @param           ctx    "CLI context for the config command"
+//
+// @return          error  "nil on success, or a usage, validation, or storage error"
+func configCmd(ctx *cli.Context) error {
+	if ctx.Bool("global") && ctx.Bool("local") {
+		return tracerr.Wrap(errConfigUsage)
+	}
+
+	args := ctx.Args().Slice()
+
+	if ctx.Bool("list") {
+		return configList(ctx)
+	}
+	if ctx.Bool("unset") {
+		if len(args) != 1 {
+			return tracerr.Wrap(errConfigUsage)
+		}
+		return configUnset(ctx, args[0])
+	}
+	if len(args) == 2 && !ctx.Bool("get") {
+		return configSet(ctx, args[0], args[1])
+	}
+	if len(args) == 1 {
+		return configGet(ctx, args[0])
+	}
+	return tracerr.Wrap(errConfigUsage)
+}
+
+// @description    Reports whether the command targets the repository-local config.
+//
+// @param           ctx    "CLI context carrying the scope flags"
+//
+// @return          bool   "true when --local is set"
+func scopeLocal(ctx *cli.Context) bool { return ctx.Bool("local") }
+
+// @description    Writes a setting at the resolved scope.
+//
+// configSet validates key and value, then writes to global config.json (default and --global) or
+// the repository .git/config (--local).
+//
+// @param           ctx     "CLI context carrying the scope flags"
+//
+// @param           key     "one of syncInterval, debounce, gitexec"
+//
+// @param           value   "validated value to store"
+//
+// @return          error   "nil on success, or a validation or storage error"
+func configSet(ctx *cli.Context, key, value string) error {
+	if _, ok := configKeys[key]; !ok {
+		return tracerr.Errorf("unknown setting: %s", key)
+	}
+	parsed, err := parseValue(key, value)
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	if scopeLocal(ctx) {
+		repoPath, err := currentRepoPath()
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+		return cfg.SetLocalSetting(repoPath, key, parsed)
+	}
+
+	settings, err := cfg.ReadGlobalSettings()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+	if err := applyGlobal(settings, key, parsed); err != nil {
+		return tracerr.Wrap(err)
+	}
+	return cfg.WriteGlobalSettings(settings)
+}
+
+// @description    Reads a setting at the resolved scope.
+//
+// configGet prints the effective value (default and --get, merged local over global over default)
+// or only the local raw value (--local). Local reads print nothing when the key is unset.
+//
+// @param           ctx     "CLI context carrying the scope flags"
+//
+// @param           key     "one of syncInterval, debounce, gitexec"
+//
+// @return          error   "nil on success, or a storage error"
+func configGet(ctx *cli.Context, key string) error {
+	if _, ok := configKeys[key]; !ok {
+		return tracerr.Errorf("unknown setting: %s", key)
+	}
+
+	if scopeLocal(ctx) {
+		repoPath, err := currentRepoPath()
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+		local, err := cfg.ReadLocalSettings(repoPath)
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+		if v, ok := localFieldString(local, key); ok {
+			_, _ = fmt.Fprintln(ctx.App.Writer, v)
+		}
+		return nil
+	}
+
+	global, err := cfg.ReadGlobalSettings()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+	local := &cfg.Settings{}
+	repoPath, repoErr := currentRepoPath()
+	if repoErr == nil {
+		local, err = cfg.ReadLocalSettings(repoPath)
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+	}
+	sync, debounce, gitExec := cfg.Resolve(global, local)
+	switch key {
+	case "syncInterval":
+		_, _ = fmt.Fprintln(ctx.App.Writer, int(sync/time.Minute))
+	case "debounce":
+		_, _ = fmt.Fprintln(ctx.App.Writer, int(debounce/time.Minute))
+	case "gitexec":
+		_, _ = fmt.Fprintln(ctx.App.Writer, gitExec)
+	}
+	return nil
+}
+
+// @description    Lists all three effective settings.
+//
+// configList prints syncInterval, debounce, and gitexec effective values.
+//
+// @param           ctx     "CLI context carrying the scope flags"
+//
+// @return          error   "nil on success, or a storage error"
+func configList(ctx *cli.Context) error {
+	global, err := cfg.ReadGlobalSettings()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+	local := &cfg.Settings{}
+	repoPath, repoErr := currentRepoPath()
+	if repoErr == nil {
+		local, err = cfg.ReadLocalSettings(repoPath)
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+	}
+	sync, debounce, gitExec := cfg.Resolve(global, local)
+	_, _ = fmt.Fprintln(ctx.App.Writer, "syncInterval="+strconv.Itoa(int(sync/time.Minute)))
+	_, _ = fmt.Fprintln(ctx.App.Writer, "debounce="+strconv.Itoa(int(debounce/time.Minute)))
+	_, _ = fmt.Fprintln(ctx.App.Writer, "gitexec="+gitExec)
+	return nil
+}
+
+// @description    Removes a setting at the resolved scope.
+//
+// configUnset removes key from global config.json (default and --global) or the repository
+// .git/config (--local).
+//
+// @param           ctx     "CLI context carrying the scope flags"
+//
+// @param           key     "one of syncInterval, debounce, gitexec"
+//
+// @return          error   "nil on success, or a storage error"
+func configUnset(ctx *cli.Context, key string) error {
+	if _, ok := configKeys[key]; !ok {
+		return tracerr.Errorf("unknown setting: %s", key)
+	}
+
+	if scopeLocal(ctx) {
+		repoPath, err := currentRepoPath()
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+		return cfg.UnsetLocalSetting(repoPath, key)
+	}
+
+	settings, err := cfg.ReadGlobalSettings()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+	clearGlobal(settings, key)
+	return cfg.WriteGlobalSettings(settings)
+}
+
+// @description    Validates and normalizes a value for key before storage.
+//
+// parseValue parses syncInterval and debounce as positive integers and stats the gitexec path,
+// returning the normalized storage string.
+//
+// @param           key      "one of syncInterval, debounce, gitexec"
+//
+// @param           value    "raw value to validate"
+//
+// @return          string   "normalized value to store"
+//
+// @return          error    "nil on success, or a validation error"
+func parseValue(key, value string) (string, error) {
+	switch key {
+	case "syncInterval", "debounce":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return "", tracerr.Errorf("invalid %s: %s", key, value)
+		}
+		if n <= 0 {
+			return "", tracerr.Errorf("%s must be positive: %d", key, n)
+		}
+		return strconv.Itoa(n), nil
+	case "gitexec":
+		if _, err := os.Stat(value); err != nil {
+			return "", tracerr.Wrap(err)
+		}
+		return value, nil
+	}
+	return "", tracerr.Errorf("unknown setting: %s", key)
+}
+
+// @description    Sets key=value on a Settings in memory.
+//
+// applyGlobal parses value for the matching field and assigns it; unknown keys are ignored.
+//
+// @param           s       "settings to mutate"
+//
+// @param           key     "one of syncInterval, debounce, gitexec"
+//
+// @param           value   "parsed value to assign"
+//
+// @return          error   "nil on success, or a parse error"
+func applyGlobal(s *cfg.Settings, key, value string) error {
+	switch key {
+	case "syncInterval":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+		s.SyncInterval = &n
+	case "debounce":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return tracerr.Wrap(err)
+		}
+		s.Debounce = &n
+	case "gitexec":
+		s.GitExec = &value
+	}
+	return nil
+}
+
+// @description    Nils key on a Settings in memory.
+//
+// clearGlobal sets the matching pointer field to nil; unknown keys are ignored.
+//
+// @param           s      "settings to mutate"
+//
+// @param           key    "one of syncInterval, debounce, gitexec"
+func clearGlobal(s *cfg.Settings, key string) {
+	switch key {
+	case "syncInterval":
+		s.SyncInterval = nil
+	case "debounce":
+		s.Debounce = nil
+	case "gitexec":
+		s.GitExec = nil
+	}
+}
+
+// @description    Returns the local raw value for key and whether it is set.
+//
+// localFieldString reads the matching pointer field and returns its string form; unset fields
+// return an empty string and false.
+//
+// @param           s        "settings to read"
+//
+// @param           key      "one of syncInterval, debounce, gitexec"
+//
+// @return          string   "raw value when set, empty otherwise"
+//
+// @return          bool     "true when the key is set"
+func localFieldString(s *cfg.Settings, key string) (string, bool) {
+	switch key {
+	case "syncInterval":
+		if s.SyncInterval != nil {
+			return strconv.Itoa(*s.SyncInterval), true
+		}
+	case "debounce":
+		if s.Debounce != nil {
+			return strconv.Itoa(*s.Debounce), true
+		}
+	case "gitexec":
+		if s.GitExec != nil {
+			return *s.GitExec, true
+		}
+	}
+	return "", false
+}
+
+// @description    Returns the repository root for the current directory.
+//
+// currentRepoPath gets the working directory and validates it as a Git repository. It is a thin
+// wrapper around isValidGitRepo so config_cmd_test can substitute repository discovery.
+//
+// @return          string   "absolute path to the repository root"
+//
+// @return          error    "nil on success, or an error from getwd or repository validation"
+func currentRepoPath() (string, error) {
+	repoPath, err := os.Getwd()
+	if err != nil {
+		return "", tracerr.Wrap(err)
+	}
+	return isValidGitRepo(repoPath)
+}

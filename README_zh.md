@@ -67,17 +67,24 @@ Git Auto Sync 提供两种工作模式：
 
 - **手动模式**：`git-auto-sync sync` 立即执行一次完整同步流程。
 - **守护模式**：`git-auto-sync daemon add <仓库路径>` 启动后台服务，持续监控仓库。
+- **设置**：`git-auto-sync config <键> [值]` 读取、设置或删除 `syncInterval`、`debounce`、`gitexec`，支持 `--global`（默认）或 `--local` 作用域。
 
 运行 `git-auto-sync --help` 或 `git-auto-sync daemon --help` 查看所有命令。
 
 ### 仓库配置
 
-每个仓库的独立设置保存在 Git 配置的 `[auto-sync]` 段：
+设置分为两级：全局（位于 `~/.config/git-auto-sync/config.json`）与仓库级（位于 Git 配置的 `[auto-sync]` 段）。仓库级覆盖全局，全局覆盖默认值。时间单位为分钟。
 
 ```bash
-git config --local auto-sync.syncInterval 300   # 同步间隔秒数，默认 600
-git config --local auto-sync.exec /path/to/git  # 可选的自定义 git 可执行文件路径
+git-auto-sync config syncInterval 60          # 分钟，默认 60（全局）
+git-auto-sync config --local syncInterval 30  # 仓库级覆盖
+git-auto-sync config --local debounce 5       # 分钟，默认 10
+git-auto-sync config --global gitexec /usr/bin/git  # 默认：通过 PATH 查找 git
+git-auto-sync config --list                   # 查看生效设置
+git-auto-sync config --unset syncInterval     # 删除设置（默认：全局）
 ```
+
+默认值：每小时同步一次、防抖 10 分钟、`git` 通过 PATH 查找。
 
 ### 合并冲突
 

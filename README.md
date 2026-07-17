@@ -67,17 +67,26 @@ Git Auto Sync provides two modes:
 
 - **Manual**: `git-auto-sync sync` runs the sync pipeline once.
 - **Daemon**: `git-auto-sync daemon add <repo>` starts a background service that monitors the repository.
+- **Settings**: `git-auto-sync config <key> [value]` gets, sets, or unsets `syncInterval`, `debounce`, and `gitexec` at `--global` (default) or `--local` scope.
 
 Run `git-auto-sync --help` or `git-auto-sync daemon --help` for all commands.
 
 ### Repository configuration
 
-Per-repository settings live in the Git config section `[auto-sync]`:
+Settings live at two scopes: global (in `~/.config/git-auto-sync/config.json`) and per-repository
+(in the Git config section `[auto-sync]`). Repository settings override global settings, which
+override defaults. Time units are minutes.
 
 ```bash
-git config --local auto-sync.syncInterval 300   # seconds, default 600
-git config --local auto-sync.exec /path/to/git  # optional custom git executable
+git-auto-sync config syncInterval 60          # minutes, default 60 (global)
+git-auto-sync config --local syncInterval 30  # per-repo override
+git-auto-sync config --local debounce 5       # minutes, default 10
+git-auto-sync config --global gitexec /usr/bin/git  # default: git from PATH
+git-auto-sync config --list                   # show effective settings
+git-auto-sync config --unset syncInterval     # remove a setting (default: global)
 ```
+
+Defaults: sync once per hour, ten-minute debounce, `git` resolved through `PATH`.
 
 ### Merge conflicts
 

@@ -30,27 +30,30 @@ func (d *Daemon) Start(s service.Service) error {
 //
 // run reads the daemon configuration, starts a watcher per repository, then polls the
 // configuration file for changes and reconciles the running watchers: added repositories are
-// started and removed repositories self-terminate. It panics if the initial configuration load
-// fails and logs, rather than panics on, subsequent read errors.
+// started and removed repositories self-terminate. When the global synchronization settings
+// (syncInterval, debounce, gitexec) change, every watcher is restarted so it picks up the new
+// values. It panics if the initial configuration load fails and logs, rather than panics on,
+// subsequent read errors.
 func (d *Daemon) run() {
 	mgr := newWatcherManager()
 
-	daemonConfig, err := config.ReadDaemonConfig()
+	daemonConfig, err := config.ReadGlobalSettings()
 	if err != nil {
 		panic(err)
 	}
 	mgr.reconcile(daemonConfig.Repos, daemonConfig.Envs)
 
-	lastMod, err := config.DaemonConfigModTime()
+	lastMod, err := config.GlobalSettingsModTime()
 	if err != nil {
 		panic(err)
 	}
+	lastSettings := daemonConfig
 
 	ticker := time.NewTicker(configPollInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		mod, err := config.DaemonConfigModTime()
+		mod, err := config.GlobalSettingsModTime()
 		if err != nil {
 			slog.Error("read daemon config mtime failed", "error", err)
 			continue
@@ -58,11 +61,17 @@ func (d *Daemon) run() {
 
 		if !mod.Equal(lastMod) {
 			lastMod = mod
-			daemonConfig, err = config.ReadDaemonConfig()
+			cur, err := config.ReadGlobalSettings()
 			if err != nil {
 				slog.Error("read daemon config failed", "error", err)
 				continue
 			}
+			if settingsChanged(lastSettings, cur) {
+				slog.Info("global settings changed, restarting watchers")
+				mgr.RestartAll()
+			}
+			lastSettings = cur
+			daemonConfig = cur
 		}
 
 		mgr.reconcile(daemonConfig.Repos, daemonConfig.Envs)
