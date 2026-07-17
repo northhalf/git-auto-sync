@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,7 +19,8 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
-var version = "dev"
+//go:embed .version
+var version string
 
 // @description    Runs the command-line application.
 //

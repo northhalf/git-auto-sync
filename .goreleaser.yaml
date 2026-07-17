@@ -66,6 +66,7 @@ archives:
     files:
       - LICENSE
       - README.md
+      - README_zh.md
       - completions/bash_autocomplete
       - completions/zsh_autocomplete
 checksum:
