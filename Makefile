@@ -1,5 +1,5 @@
-MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-INSTALL_DIR= $(MAKEFILE_DIR)/bin
+MAKEFILE_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+INSTALL_DIR := $(MAKEFILE_DIR)/bin
 
 # Default to the host GOOS so native builds pick the correct executable suffix; override with
 # `make GOOS=windows` to cross-compile for Windows from another platform.

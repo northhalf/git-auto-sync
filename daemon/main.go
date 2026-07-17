@@ -35,6 +35,7 @@ func (d *Daemon) Start(s service.Service) error {
 // values. It panics if the initial configuration load fails and logs, rather than panics on,
 // subsequent read errors.
 func (d *Daemon) run() {
+	slog.Info("start daemon service")
 	mgr := newWatcherManager()
 
 	daemonConfig, err := config.ReadGlobalSettings()
@@ -95,6 +96,7 @@ func (d *Daemon) Stop(s service.Service) error {
 // setup errors and logs a service run error.
 func main() {
 	_, _ = logging.SetupDaemonLogger(os.Getenv("DEBUG") == "true")
+	slog.Info("Start git-auto-sync daemon")
 
 	daemon := Daemon{}
 	autoSyncService, err := daemonservice.NewServiceWithDaemon(&daemon)
