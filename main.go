@@ -149,6 +149,16 @@ func main() {
 						Action: daemonStatus,
 					},
 					{
+						Name:   "run",
+						Usage:  "Start the daemon service",
+						Action: daemonRun,
+					},
+					{
+						Name:   "stop",
+						Usage:  "Stop the daemon service",
+						Action: daemonStop,
+					},
+					{
 						Name:    "list",
 						Aliases: []string{"ls"},
 						Usage:   "List of repos being auto-synced",

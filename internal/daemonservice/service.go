@@ -153,6 +153,22 @@ func (srv Service) EnsureRunning() error {
 	return tracerr.Wrap(srv.Service.Start())
 }
 
+// @description    Stops the daemon service without uninstalling it.
+//
+// Stop stops a running daemon service so it can be started again later without reinstalling. It
+// announces the stop step to the user and the CLI log. Unlike Disable, it leaves the service
+// installed.
+//
+// @return          error  "nil on success, or a wrapped error from the stop operation"
+func (srv Service) Stop() error {
+	logStep("Stopping git-auto-sync-daemon")
+	if err := srv.Service.Stop(); err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	return nil
+}
+
 // @description    Disable stops and uninstalls the daemon user service.
 //
 // @return          error  "nil on success, or an error stopping or uninstalling the service"

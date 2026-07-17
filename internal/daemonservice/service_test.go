@@ -144,6 +144,39 @@ func TestEnableLogsReinstallRecovery(t *testing.T) {
 	}
 }
 
+// @description    Verifies Stop logs the stop step and returns nil without uninstalling.
+//
+// @param           t  "test handle used for assertions"
+func TestStopLogsStopOnly(t *testing.T) {
+	srv := Service{Service: &fakeService{}}
+
+	logs := captureSlog(t, func() {
+		if err := srv.Stop(); err != nil {
+			t.Fatalf("Stop returned error %v, want nil", err)
+		}
+	})
+
+	if !strings.Contains(logs, "Stopping git-auto-sync-daemon") {
+		t.Fatalf("Stop logs = %q, want to contain the stop message", logs)
+	}
+	if strings.Contains(logs, "Uninstalling") {
+		t.Fatalf("Stop logs = %q, should not uninstall", logs)
+	}
+}
+
+// @description    Verifies Stop wraps a stop error and returns it.
+//
+// @param           t  "test handle used for assertions"
+func TestStopPropagatesError(t *testing.T) {
+	srv := Service{Service: &fakeService{stopErr: errors.New("stop failed")}}
+
+	err := srv.Stop()
+
+	if err == nil {
+		t.Fatal("Stop err = nil, want an error")
+	}
+}
+
 // @description    Verifies Disable logs stop and uninstall steps and returns nil.
 //
 // @param           t  "test handle used for assertions"

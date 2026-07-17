@@ -84,6 +84,82 @@ func daemonStatus(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    Starts the daemon service, installing it when missing.
+//
+// daemonRun ensures the daemon service is installed and running, then reports the outcome. When the
+// service is not installed, EnsureRunning installs it first; when it is stopped, it is started; when
+// it is already running, it is left untouched. After the start attempt, daemonRun prints whether the
+// daemon started, was already running, or failed to start.
+//
+// @param           ctx    "CLI context for the daemon run command"
+//
+// @return          error  "nil on success, or an error building, querying, installing, or starting the service"
+func daemonRun(ctx *cli.Context) error {
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	alreadyRunning := false
+	if status, queryErr := s.Status(); queryErr == nil {
+		alreadyRunning = status == service.StatusRunning
+	} else if !errors.Is(queryErr, daemonservice.ErrNotInstalled) {
+		return tracerr.Wrap(queryErr)
+	}
+
+	if err := s.EnsureRunning(); err != nil {
+		fmt.Println("git-auto-sync-daemon failed to start")
+		return tracerr.Wrap(err)
+	}
+
+	if alreadyRunning {
+		fmt.Println("git-auto-sync-daemon is already running")
+	} else {
+		fmt.Println("git-auto-sync-daemon started successfully")
+	}
+
+	return nil
+}
+
+// @description    Stops the daemon service.
+//
+// daemonStop stops a running daemon service and reports the outcome. When the service is not
+// installed or already stopped, it reports that state without attempting a stop. After a stop
+// attempt it prints whether the daemon stopped or failed to stop.
+//
+// @param           ctx    "CLI context for the daemon stop command"
+//
+// @return          error  "nil on success, or an error building, querying, or stopping the service"
+func daemonStop(ctx *cli.Context) error {
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	status, queryErr := s.Status()
+	if queryErr != nil {
+		if errors.Is(queryErr, daemonservice.ErrNotInstalled) {
+			fmt.Println("git-auto-sync-daemon is NOT installed")
+			return nil
+		}
+		return tracerr.Wrap(queryErr)
+	}
+
+	if status != service.StatusRunning {
+		fmt.Println("git-auto-sync-daemon is not running")
+		return nil
+	}
+
+	if err := s.Stop(); err != nil {
+		fmt.Println("git-auto-sync-daemon failed to stop")
+		return tracerr.Wrap(err)
+	}
+
+	fmt.Println("git-auto-sync-daemon stopped successfully")
+
+	return nil
+}
+
 // @description    daemonList prints each repository stored in the daemon configuration.
 //
 // @param           ctx    "CLI context for the daemon list command"
