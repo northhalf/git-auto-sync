@@ -1,6 +1,6 @@
 ---
 name: writing-commit-message
-description: Use when the user requests to write a git commit message for the meme-pilot project. Load this skill to generate the commit message and write it to .tmp/commit_message.md
+description: Use when the user requests to write a git commit message for the git-auto-sync project. Load this skill to generate the commit message and write it to .tmp/commit_message.md
 ---
 
 # Git Commit Message Specification
@@ -12,13 +12,24 @@ description: Use when the user requests to write a git commit message for the me
 ```
 
 - **type**: `feat` | `fix` | `perf` | `refactor` | `docs` | `test`
-- **scope**: `engine` | `plugins` | `docs` | `config` | `integration`
+- **scope**: one scope per module, matching the changed package or directory:
+  - `cli` - the `git-auto-sync` CLI: root commands and repo validation (root `*.go`).
+  - `syncer` - the sync pipeline: commit, fetch, rebase, push, and ignore (`internal/syncer`).
+  - `watcher` - filesystem monitoring (`internal/watcher`).
+  - `daemon` - the background service process and its install/start/stop lifecycle (`daemon/`, `internal/daemonservice`).
+  - `config` - daemon and per-repository `[auto-sync]` settings (`internal/config`).
+  - `logging` - CLI and daemon logging (`internal/logging`).
+  - `build` - build, release, CI, dependencies, and packaging (`Makefile`, `.version`, `go.mod`, `.github/`, `assets/`, `completions/`).
+  - `docs` - documentation (`README.md`, `README_zh.md`).
 - **summary**: One sentence describing what was done, starting with a verb, in English.
 
+When a change spans multiple modules, pick the scope of the most significant changed file.
+
 Examples:
-- `feat(engine): implement lossless image compression module image_optimizer`
-- `refactor(engine): extract shared protocols, package-level exports and relative import restructuring`
-- `docs: fix cross-document inconsistencies (model names, env vars, Python version)`
+- `feat(daemon): reload daemon config without restart via config-file polling`
+- `refactor(syncer): cache Git index and ignore rules in IgnoreChecker for each sync round`
+- `fix(watcher): debounce file changes without delaying scheduled syncs`
+- `docs: rewrite README, add Chinese README, and trim release config`
 
 ## Body Structure
 
@@ -34,10 +45,12 @@ Starts with **Engineering Changes:**, lists all added/modified/deleted files wit
 
 ```
 Engineering Changes:
-- Added bot/engine/image_optimizer.py: ImageOptimizer class + OptimizeResult
-  dataclass; JPEG EXIF metadata removal + high-quality re-encoding (quality=95)...
-- Modified bot/engine/__init__.py: export ImageOptimizer and OptimizeResult
-- Modified bot/engine/index_manager.py: __init__ added optimizer parameter
+- Added internal/syncer/ignore_checker.go: IgnoreChecker struct caching the
+  repository root, a tracked-path set, and a compiled gitignore matcher;
+  NewIgnoreChecker reads the index and patterns once, ShouldIgnore reuses the
+  snapshot per path
+- Modified internal/syncer/commit.go: build one IgnoreChecker before the status
+  loop and call checker.ShouldIgnore per record instead of ShouldIgnoreFile
 ```
 
 ### Tests
@@ -46,8 +59,8 @@ Starts with **Tests:**, describing test results:
 
 ```
 Tests:
-- Added tests/unit/engine/test_image_optimizer.py: 11 unit tests
-- uv run pytest: 237 passed (215 unit + 22 integration)
+- Added internal/syncer/ignore_checker_test.go: 4 unit tests
+- go test ./...: all packages pass; golangci-lint run ./...: 0 issues; gofmt clean
 ```
 
 For documentation-only changes:
@@ -64,41 +77,41 @@ Starts with **Documentation:**, listing updated doc files.
 
 ```
 Documentation:
-- Updated docs/process.md: appended image_optimizer.py completion record
-- Updated docs/api/API.md: added image_optimizer section to index
+- Updated README.md: added .gitkeep to the ignored-files exceptions
+- Updated README_zh.md: mirrored the same change in the 忽略文件 section
 ```
 
 ## Full Example
 
 ```
-feat(engine): implement lossless image compression module image_optimizer
+refactor(syncer): cache Git index and ignore rules in IgnoreChecker for each sync round
 
-Implement bot/engine/image_optimizer.py to perform lossless compression
-on meme images, reducing file size before indexing. Uses Pillow for
-JPEG/PNG/WebP/GIF formats, BMP is skipped.
+Extract a reusable IgnoreChecker from the per-path ShouldIgnoreFile so the
+commit loop no longer re-opens the repository, re-reads the index, and
+re-parses gitignore patterns for every file in a single sync round. One
+checker is built before iterating the status output and reused across all
+paths; ShouldIgnoreFile remains a single-shot convenience wrapper for the
+check CLI.
 
 Engineering Changes:
-- Added bot/engine/image_optimizer.py: ImageOptimizer class + OptimizeResult
-  dataclass; JPEG: EXIF metadata removal + high quality re-encoding (quality=95,
-  optimize=True, progressive=True), PNG: optimize=True truly lossless,
-  WebP: lossless mode (quality=80, method=6), GIF: preserve animation
-  properties (duration/loop/transparency) remove redundant metadata;
-  BMP: skipped returns skipped=True; atomic write (.tmp + os.replace),
-  keep original file if compressed size larger (returns skipped=True)
-- Added Pillow production dependency (uv add Pillow, v12.2.0)
-- Modified bot/engine/__init__.py: export ImageOptimizer and OptimizeResult
+- Added internal/syncer/ignore_checker.go: IgnoreChecker caching the repo
+  root, a tracked-path set from the Git index, and a compiled gitignore
+  matcher; NewIgnoreChecker reads index and patterns once, ShouldIgnore
+  reuses the snapshot so tracked files bypass every check
+- Modified internal/syncer/ignore.go: ShouldIgnoreFile now wraps an
+  IgnoreChecker; removed the unused isTracked and isFileIgnoredByGit helpers
+- Modified internal/syncer/commit.go: build one IgnoreChecker before the
+  status loop and call checker.ShouldIgnore per record
 
 Tests:
-- Added tests/unit/engine/test_image_optimizer.py: 11 unit tests,
-  covering OptimizeResult creation/frozen/skipped, ValueError for
-  unsupported format, BMP skip, file not found, JPEG compression/EXIF
-  removal, PNG/WebP/GIF compression, GIF animation preservation
-- uv run pytest: 237 passed (215 unit + 22 integration)
+- Added internal/syncer/ignore_checker_test.go: 4 unit tests covering
+  parity with ShouldIgnoreFile, round reuse, tracked bypass, and non-repo
+  construction failure
+- go test ./...: all packages pass; golangci-lint run ./...: 0 issues; gofmt clean
 
 Documentation:
-- Added docs/api/bot/engine/image_optimizer.md: interface documentation
-- Updated docs/api/API.md: added image_optimizer section to index
-- Updated docs/process.md: appended completion record
+- Updated README.md: added .gitkeep to the ignored-files exceptions
+- Updated README_zh.md: mirrored the change in the 忽略文件 section
 ```
 
 ## Complete Workflow (Mandatory)
@@ -107,12 +120,10 @@ Before writing the commit message, you must follow this sequence:
 
 ### 1. Read project documentation for context
 
-Read the files specified in `CLAUDE.md` “required documents” to understand the current project structure and conventions:
+Read the project documentation to understand the current structure and conventions:
 
-- `docs/PRD.md` — requirements and feature boundaries
-- `CONTEXT.md` — terminology and domain concepts
-- `README.md` / `.env.example` / `docker-compose.yml` — deployment and environment
-- `docs/api/API.md` — existing module interfaces
+- `CLAUDE.md` - project architecture, build/test/lint commands, code style
+- `README.md` / `README_zh.md` - features, usage, and deployment notes
 
 ### 2. Review recent commits as reference
 
@@ -120,7 +131,7 @@ Read the files specified in `CLAUDE.md` “required documents” to understand t
 git log -3 --format="%H%n%s%n%b%n---"   # last 3 full commits
 ```
 
-Refer to historical type/scope selection, summary style, and body structure.
+Refer to historical type selection, summary style, and body structure. Choose the scope from the project's modules (see the scope list above), not from past commit subjects.
 
 ### 3. Determine the scope of changes with git diff
 
@@ -129,11 +140,12 @@ git diff --name-only          # working tree changes
 git diff --cached --name-only # staged changes
 ```
 
-Classify changed files: code (`bot/`, `tests/`), config (root dir), documentation (`docs/`).
+Classify changed files by module to choose the scope: `cli` (root `*.go`), `syncer`/`watcher`/`config`/`logging` (`internal/...`), `daemon` (`daemon/`, `internal/daemonservice`), `build` (`Makefile`, `.version`, `go.mod`, `.github/`, `assets/`, `completions/`), `docs` (`README.md`, `README_zh.md`).
 
 ### 4. Analyze the role of the changes in the project
 
 - Determine change type: feat / fix / perf / refactor / docs / test
+- Determine scope from the changed package or directory (see the scope list above); when multiple modules change, use the most significant one.
 - Understand its position and role in the overall project architecture (which module, what problem it solves, what improvement it brings)
 
 ### 5. Generate commit message
