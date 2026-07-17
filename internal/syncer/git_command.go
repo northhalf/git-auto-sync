@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -46,7 +48,16 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 	// escapes such as "\346\265\213". The -z flag used by status already disables quoting, but
 	// setting this explicitly keeps path output parseable for non-ASCII filenames regardless of
 	// the user's git config, and makes non-status command output (fetch, rebase, ...) readable.
-	gitArgs := append([]string{"-c", "core.quotePath=false"}, args...)
+	gitArgs := []string{"-c", "core.quotePath=false"}
+	if runtime.GOOS == "windows" {
+		// The daemon service runs as LocalSystem while repositories are owned by the installing
+		// user, so git's safe.directory ownership check refuses worktree operations on them. Trust
+		// this repository for the command so the daemon can sync user-owned repos without requiring
+		// a global safe.directory entry that would also relax the user's interactive git. Git on
+		// Windows compares safe.directory paths using forward slashes, so normalize the repo path.
+		gitArgs = append(gitArgs, "-c", "safe.directory="+filepath.ToSlash(repoConfig.RepoPath))
+	}
+	gitArgs = append(gitArgs, args...)
 
 	statusCmd := exec.Command(cmd, gitArgs...)
 	statusCmd.Dir = repoConfig.RepoPath

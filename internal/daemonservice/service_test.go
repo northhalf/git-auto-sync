@@ -40,6 +40,47 @@ func captureSlog(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// @description    Verifies windowsUserEnvVars captures the user profile env vars.
+//
+// @param           t  "test handle used for assertions"
+func TestWindowsUserEnvVarsCapturesProfileDirs(t *testing.T) {
+	t.Setenv("APPDATA", `C:\Users\tester\AppData\Roaming`)
+	t.Setenv("LOCALAPPDATA", `C:\Users\tester\AppData\Local`)
+	t.Setenv("USERPROFILE", `C:\Users\tester`)
+	t.Setenv("Path", `C:\Windows\system32;D:\Git\bin`)
+
+	envVars := windowsUserEnvVars()
+
+	if got := envVars["APPDATA"]; got != `C:\Users\tester\AppData\Roaming` {
+		t.Fatalf("APPDATA = %q, want the CLI process value", got)
+	}
+	if got := envVars["LOCALAPPDATA"]; got != `C:\Users\tester\AppData\Local` {
+		t.Fatalf("LOCALAPPDATA = %q, want the CLI process value", got)
+	}
+	if got := envVars["USERPROFILE"]; got != `C:\Users\tester` {
+		t.Fatalf("USERPROFILE = %q, want the CLI process value", got)
+	}
+	if got := envVars["Path"]; got != `C:\Windows\system32;D:\Git\bin` {
+		t.Fatalf("Path = %q, want the CLI process value", got)
+	}
+}
+
+// @description    Verifies windowsUserEnvVars omits unset profile env vars.
+//
+// @param           t  "test handle used for assertions"
+func TestWindowsUserEnvVarsOmitsEmpties(t *testing.T) {
+	t.Setenv("APPDATA", "")
+	t.Setenv("LOCALAPPDATA", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("Path", "")
+
+	envVars := windowsUserEnvVars()
+
+	if len(envVars) != 0 {
+		t.Fatalf("envVars = %v, want an empty map when no profile env vars are set", envVars)
+	}
+}
+
 // @description    Verifies Status returns ErrNotInstalled for a not-installed service.
 //
 // @param           t  "test handle used for assertions"

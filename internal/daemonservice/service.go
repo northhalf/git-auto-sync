@@ -70,12 +70,55 @@ func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
 		Option:       options,
 	}
 
+	if runtime.GOOS == "windows" {
+		// kardianos ignores UserService on Windows, so the service installs as LocalSystem. The
+		// daemon then resolves %APPDATA%/%LOCALAPPDATA% against the system profile instead of the
+		// installing user's, reading an empty config and writing state and logs where the CLI never
+		// looks. Inject the CLI process's values via the service Environment registry value so the
+		// daemon shares the user's config, state, and log paths.
+		svcConfig.EnvVars = windowsUserEnvVars()
+	}
+
 	s, err := service.New(daemon, svcConfig)
 	if err != nil {
 		return Service{}, tracerr.Wrap(err)
 	}
 
 	return Service{Service: s}, nil
+}
+
+// @description    Collects the Windows user profile environment for the service process.
+//
+// windowsUserEnvVars returns APPDATA, LOCALAPPDATA, USERPROFILE, and Path from the current process
+// so the daemon service, which runs as LocalSystem, resolves the same paths and executables as the
+// installing user's CLI: APPDATA/LOCALAPPDATA for config, state, and log files; USERPROFILE so
+// go-git and git resolve the user's global .gitconfig (author identity) and .ssh directory instead
+// of LocalSystem's empty profile; and Path so the daemon finds git and its helper tools, which
+// typically live in a user-PATH entry the LocalSystem process does not inherit. Path is captured as
+// the already-merged, expanded Windows value, which is a superset of the system PATH, so overriding
+// the service's inherited Path loses no system entries. Empty values are omitted so the service
+// Environment registry value is not populated with blanks; when all are unset the returned map is
+// empty and kardianos skips the registry write, leaving the daemon's inherited environment
+// untouched. HOME is intentionally not injected because go-git and Git for Windows resolve the home
+// directory from USERPROFILE on Windows, and a MSYS-style HOME captured from a git-bash CLI would be
+// a non-Windows path.
+//
+// @return          map[string]string  "APPDATA, LOCALAPPDATA, USERPROFILE, and Path entries present only when set"
+func windowsUserEnvVars() map[string]string {
+	envVars := map[string]string{}
+	if v := os.Getenv("APPDATA"); v != "" {
+		envVars["APPDATA"] = v
+	}
+	if v := os.Getenv("LOCALAPPDATA"); v != "" {
+		envVars["LOCALAPPDATA"] = v
+	}
+	if v := os.Getenv("USERPROFILE"); v != "" {
+		envVars["USERPROFILE"] = v
+	}
+	if v := os.Getenv("Path"); v != "" {
+		envVars["Path"] = v
+	}
+	return envVars
 }
 
 // @description    Installs and starts the daemon service.
