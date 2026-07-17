@@ -32,15 +32,19 @@ type AwakeNotifier interface {
 // runs a repository-local state machine. Fetch and push errors use capped retry backoff; errors from
 // other synchronization stages pause the repository until the watcher context is canceled. A
 // failure in one repository never terminates the daemon process or another repository watcher.
+// onState receives state transitions for the caller to record; pass nil when no recording is needed,
+// such as the foreground CLI watcher.
 //
-// @param           ctx     "context whose cancellation stops the watcher and releases its resources"
+// @param           ctx      "context whose cancellation stops the watcher and releases its resources"
 //
-// @param           logger  "repository-scoped logger"
+// @param           logger   "repository-scoped logger"
 //
-// @param           cfg     "repository configuration and watcher timing values"
+// @param           cfg      "repository configuration and watcher timing values"
 //
-// @return          error   "an error from watcher setup or filesystem event inspection"
-func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoConfig) error {
+// @param           onState  "callback invoked on watcher state transitions, or nil"
+//
+// @return          error    "an error from watcher setup or filesystem event inspection"
+func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoConfig, onState func(StateReport)) error {
 	logger.Debug("starting watcher")
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -77,6 +81,7 @@ func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoCo
 		isRemoteSyncError: syncer.IsRemoteSyncError,
 		syncErrorStage:    syncer.SyncErrorStage,
 		retryDelays:       watcherRetryDelays,
+		reportState:       onState,
 	}
 
 	logger.Info("watcher started")

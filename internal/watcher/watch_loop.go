@@ -14,12 +14,25 @@ const (
 	watchModePaused
 )
 
+// StateReport is the runtime status a watcher reports on state transitions. Paused is true when the
+// watcher halted after a non-remote error needing user intervention; Stage carries the failed
+// synchronization stage in that case and is empty while running. Remote-failure backoff is reported
+// as running because it auto-recovers.
+type StateReport struct {
+	Paused bool
+	Stage  string
+}
+
 type watchDependencies struct {
 	autoSync          func() error
 	shouldIgnore      func(path string) (bool, error)
 	isRemoteSyncError func(error) bool
 	syncErrorStage    func(error) string
 	retryDelays       []time.Duration
+	// reportState receives state transitions; nil when the caller does not record state. It is
+	// invoked on watcher start, on a successful sync, and on a non-remote error that pauses the
+	// watcher. Remote-failure backoff does not invoke it because the watcher remains running.
+	reportState func(StateReport)
 }
 
 // @description    Selects a retry delay for a consecutive remote failure.
@@ -142,7 +155,16 @@ func runWatchLoop(
 		startSync()
 	}
 
+	// report forwards a state transition to the optional recorder. It is nil-safe so the foreground
+	// CLI watcher, which passes no recorder, runs unchanged.
+	report := func(state StateReport) {
+		if deps.reportState != nil {
+			deps.reportState(state)
+		}
+	}
+
 	startSync()
+	report(StateReport{Paused: false})
 	ctxDone := ctx.Done()
 
 	for {
@@ -172,6 +194,7 @@ func runWatchLoop(
 				}
 				mode = watchModeNormal
 				remoteFailures = 0
+				report(StateReport{Paused: false})
 				if pendingSync {
 					pendingSync = false
 					requestDebouncedSync()
@@ -197,6 +220,7 @@ func runWatchLoop(
 
 			mode = watchModePaused
 			pendingSync = false
+			report(StateReport{Paused: true, Stage: stage})
 			stopTimer(debounceTimer)
 			debounceC = nil
 			stopTimer(retryTimer)

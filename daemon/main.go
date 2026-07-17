@@ -75,6 +75,7 @@ func (d *Daemon) run() {
 		}
 
 		mgr.reconcile(daemonConfig.Repos, daemonConfig.Envs)
+		mgr.Heartbeat()
 	}
 }
 

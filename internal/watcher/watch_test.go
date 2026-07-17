@@ -427,7 +427,7 @@ func Test_WatchForChangesKeepsRunningAfterInitialRemoteFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- WatchForChanges(ctx, discardLogger(), cfg)
+		done <- WatchForChanges(ctx, discardLogger(), cfg, nil)
 	}()
 
 	select {
@@ -435,6 +435,62 @@ func Test_WatchForChangesKeepsRunningAfterInitialRemoteFailure(t *testing.T) {
 		t.Fatalf("watcher returned after retryable initial failure: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
+
+	cancel()
+	waitForWatchDone(t, done)
+}
+
+// @description    Verifies state transitions are reported.
+//
+// Test_WatchLoopReportsStateTransitions verifies that the watcher reports running at start and
+// paused (with the failed stage) after a non-remote synchronization error, so the daemon can persist
+// the per-repository status for the CLI.
+//
+// @param           t   "test handle used for watcher lifecycle and report assertions"
+func Test_WatchLoopReportsStateTransitions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	reports := make(chan StateReport, 4)
+	calls := make(chan int, 2)
+	var attempts atomic.Int32
+	deps := watchDependencies{
+		autoSync: func() error {
+			calls <- int(attempts.Add(1))
+			return errors.New("author failed")
+		},
+		isRemoteSyncError: func(error) bool { return false },
+		syncErrorStage:    func(error) string { return "author" },
+		retryDelays:       []time.Duration{time.Millisecond},
+		reportState:       func(r StateReport) { reports <- r },
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, nil, deps)
+	}()
+
+	assert.Equal(t, waitForSyncCall(t, calls), 1)
+
+	recv := func() StateReport {
+		select {
+		case r := <-reports:
+			return r
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for state report")
+			return StateReport{}
+		}
+	}
+
+	// Start report: running.
+	start := recv()
+	assert.Assert(t, !start.Paused)
+	assert.Equal(t, start.Stage, "")
+
+	// Pause report after the non-remote error.
+	paused := recv()
+	assert.Assert(t, paused.Paused)
+	assert.Equal(t, paused.Stage, "author")
 
 	cancel()
 	waitForWatchDone(t, done)

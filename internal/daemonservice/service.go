@@ -169,6 +169,29 @@ func (srv Service) Stop() error {
 	return nil
 }
 
+// @description    Restarts the daemon service.
+//
+// Restart stops a running daemon service and starts it again. When the service is already stopped
+// it is started without a preceding stop. A not-installed service is reported as ErrNotInstalled so
+// the caller can suggest installation rather than attempting a restart.
+//
+// @return          error  "nil on success, ErrNotInstalled when not installed, or an error querying, stopping, or starting the service"
+func (srv Service) Restart() error {
+	status, err := srv.Status()
+	if err != nil {
+		return err
+	}
+
+	if status == service.StatusRunning {
+		if err := srv.Stop(); err != nil {
+			return tracerr.Wrap(err)
+		}
+	}
+
+	logStep("Restarting git-auto-sync-daemon")
+	return tracerr.Wrap(srv.Service.Start())
+}
+
 // @description    Disable stops and uninstalls the daemon user service.
 //
 // @return          error  "nil on success, or an error stopping or uninstalling the service"

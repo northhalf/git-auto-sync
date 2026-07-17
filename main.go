@@ -65,7 +65,7 @@ func main() {
 						return tracerr.Wrap(err)
 					}
 
-					return watcher.WatchForChanges(context.Background(), logging.WithRepo(repoPath), cfg)
+					return watcher.WatchForChanges(context.Background(), logging.WithRepo(repoPath), cfg, nil)
 				},
 			},
 			{
@@ -157,6 +157,11 @@ func main() {
 						Name:   "stop",
 						Usage:  "Stop the daemon service",
 						Action: daemonStop,
+					},
+					{
+						Name:   "restart",
+						Usage:  "Restart the daemon service",
+						Action: daemonRestart,
 					},
 					{
 						Name:    "list",

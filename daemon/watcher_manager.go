@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/northhalf/git-auto-sync/internal/daemonstate"
 	"github.com/northhalf/git-auto-sync/internal/logging"
 	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
@@ -36,23 +37,28 @@ type watcherHandle struct {
 // watcherManager owns the set of running repository watchers and reconciles it against the daemon
 // configuration. Removal is self-detected by each watcher (see startDaemonWatcher); the manager
 // starts watchers for newly added repositories and cleans up handles for watchers that have exited.
+// The recorder persists per-repository runtime status to state.json so the CLI can report it.
 type watcherManager struct {
 	mu       sync.Mutex
 	watchers map[string]*watcherHandle
 	start    func(repoPath string, envs []string) *watcherHandle
+	recorder *daemonstate.Recorder
 }
 
 // @description    Creates the daemon watcher manager.
 //
-// newWatcherManager returns a manager that starts repository watchers with startDaemonWatcher.
-// The start field is overridable in tests.
+// newWatcherManager returns a manager that starts repository watchers with startDaemonWatcher and
+// records their runtime status through a new daemon state recorder. The start field is overridable
+// in tests.
 //
-// @return          *watcherManager  "manager backed by startDaemonWatcher"
+// @return          *watcherManager  "manager backed by startDaemonWatcher and a state recorder"
 func newWatcherManager() *watcherManager {
-	return &watcherManager{
+	m := &watcherManager{
 		watchers: make(map[string]*watcherHandle),
-		start:    startDaemonWatcher,
+		recorder: daemonstate.NewRecorder(),
 	}
+	m.start = m.startDaemonWatcher
+	return m
 }
 
 // @description    Reconciles running watchers against the configuration.
@@ -73,6 +79,9 @@ func (m *watcherManager) reconcile(repos []string, envs []string) {
 		select {
 		case <-handle.done:
 			delete(m.watchers, repo)
+			if m.recorder != nil {
+				m.recorder.Remove(repo)
+			}
 		default:
 		}
 	}
@@ -89,14 +98,15 @@ func (m *watcherManager) reconcile(repos []string, envs []string) {
 //
 // startDaemonWatcher builds the repository configuration, applies the daemon's environment
 // entries, polls the daemon configuration until the repository is removed, and runs the watcher.
-// The returned handle's done channel is closed when the watcher goroutine exits.
+// The watcher reports state transitions through onState so the manager can persist the repository's
+// runtime status. The returned handle's done channel is closed when the watcher goroutine exits.
 //
 // @param           repoPath  "path to the repository to watch"
 //
 // @param           envs      "daemon-level environment entries applied to the repository configuration"
 //
 // @return          *watcherHandle  "handle whose done channel closes on watcher exit"
-func startDaemonWatcher(repoPath string, envs []string) *watcherHandle {
+func (m *watcherManager) startDaemonWatcher(repoPath string, envs []string) *watcherHandle {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
@@ -119,12 +129,48 @@ func startDaemonWatcher(repoPath string, envs []string) *watcherHandle {
 		go watchForRemoval(ctx, cancel, logger, repoPath)
 		go watchForLocalChange(ctx, cancel, logger, repoPath)
 
-		if err := watcher.WatchForChanges(ctx, logger, cfg); err != nil {
+		if err := watcher.WatchForChanges(ctx, logger, cfg, m.onState(repoPath)); err != nil {
 			logger.Error("watcher exited with error", "error", err)
 		}
 	}()
 
 	return &watcherHandle{done: done, cancel: cancel}
+}
+
+// @description    Builds a watcher state callback for a repository.
+//
+// onState returns a callback that records repoPath's runtime status through the manager's recorder.
+// It returns nil when the manager has no recorder, so tests that override start with a fake run
+// unchanged and the watcher skips reporting.
+//
+// @param           repoPath  "path to the repository whose status is recorded"
+//
+// @return          func(watcher.StateReport)  "state callback, or nil when no recorder is configured"
+func (m *watcherManager) onState(repoPath string) func(watcher.StateReport) {
+	recorder := m.recorder
+	if recorder == nil {
+		return nil
+	}
+	return func(r watcher.StateReport) {
+		status := daemonstate.StatusRunning
+		stage := ""
+		if r.Paused {
+			status = daemonstate.StatusPaused
+			stage = r.Stage
+		}
+		recorder.Set(repoPath, status, stage)
+	}
+}
+
+// @description    Refreshes the heartbeat for every running watcher.
+//
+// Heartbeat bumps the persisted UpdatedAt timestamp for every tracked repository so the CLI can
+// distinguish a live daemon from one that has stopped. It is a no-op when the manager has no
+// recorder.
+func (m *watcherManager) Heartbeat() {
+	if m.recorder != nil {
+		m.recorder.Heartbeat()
+	}
 }
 
 // @description    Cancels the watcher when its repository leaves the configuration.

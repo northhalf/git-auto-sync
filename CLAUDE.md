@@ -43,10 +43,10 @@ go test -count=1 ./internal/syncer -run '^Test_RebaseBothCommitsConflict$'
 golangci-lint run ./...
 
 # Check formatting without modifying files
-test -z "$(gofmt -l -- *.go daemon/*.go internal/config/*.go internal/daemonservice/*.go internal/logging/*.go internal/syncer/*.go internal/watcher/*.go)"
+test -z "$(gofmt -l -- *.go daemon/*.go internal/config/*.go internal/daemonstate/*.go internal/daemonservice/*.go internal/logging/*.go internal/syncer/*.go internal/watcher/*.go)"
 
 # Apply formatting
-gofmt -w -- *.go daemon/*.go internal/config/*.go internal/daemonservice/*.go internal/logging/*.go internal/syncer/*.go internal/watcher/*.go
+gofmt -w -- *.go daemon/*.go internal/config/*.go internal/daemonstate/*.go internal/daemonservice/*.go internal/logging/*.go internal/syncer/*.go internal/watcher/*.go
 ```
 
 The integration-style tests under `internal/syncer` copy repositories from `internal/syncer/testdata` into temporary directories. Fixtures store repository metadata as `.gitted`; test helpers rename it to `.git` after copying. Fetch and rebase fixtures also rewrite `$TESTDATA$` remote paths. Preserve that layout when adding fixture cases.

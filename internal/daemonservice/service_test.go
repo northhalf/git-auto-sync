@@ -195,3 +195,77 @@ func TestDisableLogsStopAndUninstall(t *testing.T) {
 		}
 	}
 }
+
+// @description    Verifies Restart stops then starts a running service.
+//
+// @param           t  "test handle used for assertions"
+func TestRestartRunningStopsAndStarts(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusRunning}}
+
+	logs := captureSlog(t, func() {
+		if err := srv.Restart(); err != nil {
+			t.Fatalf("Restart returned error %v, want nil", err)
+		}
+	})
+
+	for _, want := range []string{"Stopping git-auto-sync-daemon", "Restarting git-auto-sync-daemon"} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("Restart logs = %q, want to contain %q", logs, want)
+		}
+	}
+}
+
+// @description    Verifies Restart starts a stopped service without stopping.
+//
+// @param           t  "test handle used for assertions"
+func TestRestartStoppedStartsOnly(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusStopped}}
+
+	logs := captureSlog(t, func() {
+		if err := srv.Restart(); err != nil {
+			t.Fatalf("Restart returned error %v, want nil", err)
+		}
+	})
+
+	if !strings.Contains(logs, "Restarting git-auto-sync-daemon") {
+		t.Fatalf("Restart logs = %q, want to contain restart message", logs)
+	}
+	if strings.Contains(logs, "Stopping") {
+		t.Fatalf("Restart logs = %q, should not stop an already-stopped service", logs)
+	}
+}
+
+// @description    Verifies Restart returns ErrNotInstalled for a not-installed service.
+//
+// @param           t  "test handle used for assertions"
+func TestRestartNotInstalledReturnsSentinel(t *testing.T) {
+	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
+
+	err := srv.Restart()
+
+	if !errors.Is(err, ErrNotInstalled) {
+		t.Fatalf("Restart err = %v, want ErrNotInstalled", err)
+	}
+}
+
+// @description    Verifies Restart propagates a stop error.
+//
+// @param           t  "test handle used for assertions"
+func TestRestartPropagatesStopError(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusRunning, stopErr: errors.New("stop failed")}}
+
+	if err := srv.Restart(); err == nil {
+		t.Fatal("Restart err = nil, want an error")
+	}
+}
+
+// @description    Verifies Restart propagates a start error.
+//
+// @param           t  "test handle used for assertions"
+func TestRestartPropagatesStartError(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusRunning, startErr: errors.New("start failed")}}
+
+	if err := srv.Restart(); err == nil {
+		t.Fatal("Restart err = nil, want an error")
+	}
+}

@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/kardianos/service"
 	cfg "github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/daemonservice"
+	"github.com/northhalf/git-auto-sync/internal/daemonstate"
 	"github.com/urfave/cli/v2"
 	"github.com/ztrue/tracerr"
 )
@@ -57,12 +59,14 @@ func daemonStatus(ctx *cli.Context) error {
 	switch {
 	case errors.Is(err, daemonservice.ErrNotInstalled):
 		fmt.Println("git-auto-sync-daemon is NOT installed!")
+		return nil
 	case err != nil:
 		return tracerr.Wrap(err)
 	case status == service.StatusRunning:
 		fmt.Println("git-auto-sync-daemon is Running!")
 	case status == service.StatusStopped:
 		fmt.Println("git-auto-sync-daemon is NOT Running!")
+		return nil
 	case status == service.StatusUnknown:
 		// No user-facing message for an unknown status.
 	default:
@@ -74,12 +78,16 @@ func daemonStatus(ctx *cli.Context) error {
 		return tracerr.Wrap(err)
 	}
 
-	fmt.Println("Monitoring - ")
-	for _, repoPath := range settings.Repos {
-		fmt.Println("  ", repoPath)
+	state, err := daemonstate.ReadState()
+	if err != nil {
+		return tracerr.Wrap(err)
 	}
 
-	// FIXME: Print out if there are any 'rebasing' issues and we are paused
+	fmt.Println("Monitoring - ")
+	now := time.Now()
+	for _, repoPath := range settings.Repos {
+		fmt.Printf("  %s  -  %s\n", repoPath, repoStatusText(repoPath, state, now))
+	}
 
 	return nil
 }
@@ -160,21 +168,142 @@ func daemonStop(ctx *cli.Context) error {
 	return nil
 }
 
-// @description    daemonList prints each repository stored in the daemon configuration.
+// @description    Restarts the daemon service.
+//
+// daemonRestart stops a running daemon service and starts it again, reporting the outcome. When the
+// service is not installed it suggests installing with run instead of attempting a restart.
+//
+// @param           ctx    "CLI context for the daemon restart command"
+//
+// @return          error  "nil on success or when not installed, or an error querying, stopping, or starting the service"
+func daemonRestart(ctx *cli.Context) error {
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	if err := s.Restart(); err != nil {
+		if errors.Is(err, daemonservice.ErrNotInstalled) {
+			fmt.Println("git-auto-sync-daemon is NOT installed; run `git-auto-sync daemon run` to install")
+			return nil
+		}
+		fmt.Println("git-auto-sync-daemon failed to restart")
+		return tracerr.Wrap(err)
+	}
+
+	fmt.Println("git-auto-sync-daemon restarted successfully")
+	return nil
+}
+
+// @description    daemonList prints each monitored repository with its runtime status.
+//
+// daemonList reads the daemon configuration and state file and prints the daemon service status
+// followed by one line per repository showing whether it is running normally, paused with a reason,
+// or unknown because the daemon is not refreshing its state.
 //
 // @param           ctx    "CLI context for the daemon list command"
 //
-// @return          error  "nil on success, or an error reading the configuration"
+// @return          error  "nil on success, or an error reading the configuration or state"
 func daemonList(ctx *cli.Context) error {
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
 
+	state, err := daemonstate.ReadState()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	fmt.Println("daemon:", daemonServiceStatus())
+	now := time.Now()
 	for _, repoPath := range settings.Repos {
-		fmt.Println(repoPath)
+		fmt.Printf("%s  -  %s\n", repoPath, repoStatusText(repoPath, state, now))
 	}
 	return nil
+}
+
+// @description    Returns a short daemon service status label.
+//
+// daemonServiceStatus queries the daemon service and returns a lowercase label for display: running,
+// not running, not installed, or unknown when the status cannot be determined. It never returns an
+// error so list and status output can always show a header line.
+//
+// @return          string  "short daemon service status label"
+func daemonServiceStatus() string {
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	if err != nil {
+		return "unknown"
+	}
+
+	status, err := s.Status()
+	switch {
+	case errors.Is(err, daemonservice.ErrNotInstalled):
+		return "not installed"
+	case err != nil:
+		return "unknown"
+	case status == service.StatusRunning:
+		return "running"
+	case status == service.StatusStopped:
+		return "not running"
+
+	default:
+		return "unknown"
+	}
+}
+
+// @description    Returns the human-readable status of a repository.
+//
+// repoStatusText looks up repoPath in the daemon state and returns "running", "paused (<reason>)",
+// or "unknown (daemon may not be running)" when the entry is stale, missing, or the daemon is not
+// refreshing state.
+//
+// @param           repoPath  "repository path to look up"
+//
+// @param           state     "daemon state read from state.json"
+//
+// @param           now       "reference time for staleness, typically the current time"
+//
+// @return          string    "human-readable repository status"
+func repoStatusText(repoPath string, state *daemonstate.State, now time.Time) string {
+	for _, r := range state.Repos {
+		if r.Repo != repoPath {
+			continue
+		}
+		if r.IsStale(now) {
+			return "unknown (daemon may not be running)"
+		}
+		if r.Status == daemonstate.StatusPaused {
+			return "paused (" + reasonForStage(r.Stage) + ")"
+		}
+		return "running"
+	}
+	return "unknown (daemon may not be running)"
+}
+
+// @description    Maps a paused synchronization stage to a reason.
+//
+// reasonForStage returns the user-readable reason for a pause, defaulting to "unknown error" for an
+// unrecognized stage so the output always carries a meaningful cause.
+//
+// @param           stage  "synchronization stage that caused the pause"
+//
+// @return          string  "human-readable reason"
+func reasonForStage(stage string) string {
+	switch stage {
+	case "rebase":
+		return "rebase conflict"
+	case "author":
+		return "git author not configured"
+	case "commit":
+		return "commit failed"
+	case "compare":
+		return "upstream comparison failed"
+	case "alert":
+		return "notification failed"
+	default:
+		return "unknown error"
+	}
 }
 
 // @description    Adds a repository to the daemon.
