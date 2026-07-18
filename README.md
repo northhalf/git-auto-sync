@@ -174,6 +174,13 @@ Files already tracked by Git are always synced and bypass every ignore rule. For
 
 If you want a path that is excluded by default (for example a dotfile that is not a Git control file) to be synced, stage it yourself with `git add`. Once Git tracks the file it is always eligible and bypasses every ignore rule above.
 
+In addition to the dot-prefix convention, OS-level hidden attributes are honored on platforms that have them, with no name exceptions:
+
+- **Windows** - a file or any ancestor directory carrying the `FILE_ATTRIBUTE_HIDDEN` attribute (set through File Explorer properties or `attrib +H`) is excluded.
+- **macOS** - a file or any ancestor directory carrying the `UF_HIDDEN` file flag (set with `chflags hidden`) is excluded.
+
+A hidden attribute on an ancestor directory excludes every untracked path beneath it. Tracked files still bypass these checks. Linux has no equivalent filesystem attribute, so only the dot-prefix convention applies there; the GTK `.hidden` file convention is not implemented because it is desktop-specific (Nautilus/Nemo only) and name-based rather than a filesystem attribute.
+
 ### Nested repositories
 
 Nested Git repositories found inside the worktree are detected and skipped, so they are never staged or committed as embedded gitlinks (mode `160000`). This applies to any nested repository, including linked worktrees created under `.claude/worktrees/`. Changes inside a nested repository belong to that repository, not the one being synchronized.

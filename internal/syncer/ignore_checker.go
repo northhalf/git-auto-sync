@@ -112,6 +112,13 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 		return true, nil
 	}
 
+	// A Windows-hidden directory or file is an explicit user action, so untracked paths under one
+	// are ignored before the dot-prefix exceptions below can exempt them. Tracked files already
+	// bypassed above remain eligible.
+	if isHiddenByOS(c.repoPath, filePath) {
+		return true, nil
+	}
+
 	pathParts := strings.Split(relativePath, "/")
 	hidden := false
 	for _, part := range pathParts {
