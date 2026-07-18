@@ -66,7 +66,7 @@ The daemon watches the filesystem, polls every configured interval, and syncs au
 Git Auto Sync provides two modes:
 
 - **Manual**: `git-auto-sync sync` runs the sync pipeline once.
-- **Daemon**: `git-auto-sync daemon add <repo>` starts a background service that monitors the repository.
+- **Daemon**: `git-auto-sync daemon add <repo>` starts a background service that monitors the repository. `daemon run`, `daemon stop`, and `daemon uninstall` control the service lifecycle.
 - **Settings**: `git-auto-sync config <key> [value]` gets, sets, or unsets `syncInterval`, `debounce`, and `gitexec` at `--global` (default) or `--local` scope.
 
 Run `git-auto-sync --help` or `git-auto-sync daemon --help` for all commands.

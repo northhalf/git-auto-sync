@@ -218,11 +218,11 @@ func TestStopPropagatesError(t *testing.T) {
 	}
 }
 
-// @description    Verifies Disable logs stop and uninstall steps and returns nil.
+// @description    Verifies Disable logs stop and uninstall steps for a running service and returns nil.
 //
 // @param           t  "test handle used for assertions"
 func TestDisableLogsStopAndUninstall(t *testing.T) {
-	srv := Service{Service: &fakeService{}}
+	srv := Service{Service: &fakeService{status: service.StatusRunning}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Disable(); err != nil {
@@ -234,6 +234,65 @@ func TestDisableLogsStopAndUninstall(t *testing.T) {
 		if !strings.Contains(logs, want) {
 			t.Fatalf("Disable logs = %q, want to contain %q", logs, want)
 		}
+	}
+}
+
+// @description    Verifies Disable uninstalls a stopped service without calling Stop.
+//
+// @param           t  "test handle used for assertions"
+func TestDisableStoppedSkipsStop(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusStopped}}
+
+	logs := captureSlog(t, func() {
+		if err := srv.Disable(); err != nil {
+			t.Fatalf("Disable returned error %v, want nil", err)
+		}
+	})
+
+	if strings.Contains(logs, "Stopping") {
+		t.Fatalf("Disable logs = %q, should not stop an already-stopped service", logs)
+	}
+	if !strings.Contains(logs, "Uninstalling git-auto-sync as a daemon") {
+		t.Fatalf("Disable logs = %q, want to contain the uninstall message", logs)
+	}
+}
+
+// @description    Verifies Disable returns nil without stopping or uninstalling when the service is not installed.
+//
+// @param           t  "test handle used for assertions"
+func TestDisableNotInstalledReturnsNil(t *testing.T) {
+	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
+
+	logs := captureSlog(t, func() {
+		if err := srv.Disable(); err != nil {
+			t.Fatalf("Disable returned error %v, want nil", err)
+		}
+	})
+
+	if strings.Contains(logs, "Stopping") || strings.Contains(logs, "Uninstalling") {
+		t.Fatalf("Disable logs = %q, should not touch a not-installed service", logs)
+	}
+}
+
+// @description    Verifies Disable wraps a stop error from a running service and returns it.
+//
+// @param           t  "test handle used for assertions"
+func TestDisablePropagatesStopError(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusRunning, stopErr: errors.New("stop failed")}}
+
+	if err := srv.Disable(); err == nil {
+		t.Fatal("Disable err = nil, want an error")
+	}
+}
+
+// @description    Verifies Disable wraps an uninstall error and returns it.
+//
+// @param           t  "test handle used for assertions"
+func TestDisablePropagatesUninstallError(t *testing.T) {
+	srv := Service{Service: &fakeService{status: service.StatusStopped, uninstallErr: errors.New("uninstall failed")}}
+
+	if err := srv.Disable(); err == nil {
+		t.Fatal("Disable err = nil, want an error")
 	}
 }
 

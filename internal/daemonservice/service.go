@@ -241,17 +241,30 @@ func (srv Service) Restart() error {
 
 // @description    Disable stops and uninstalls the daemon user service.
 //
-// @return          error  "nil on success, or an error stopping or uninstalling the service"
+// Disable is idempotent: it queries the service status first and only stops a running service, so
+// calling it on an already-stopped service does not surface a stop error. A not-installed service is
+// treated as already disabled and returns nil, so removing the last monitored repository or running
+// the uninstall command on a service that was already removed both succeed.
+//
+// @return          error  "nil on success or when not installed, or an error stopping or uninstalling the service"
 func (srv Service) Disable() error {
-	logStep("Stopping git-auto-sync-daemon")
-	err := srv.Service.Stop()
+	status, err := srv.Status()
 	if err != nil {
+		if errors.Is(err, ErrNotInstalled) {
+			return nil
+		}
 		return tracerr.Wrap(err)
 	}
 
+	if status == service.StatusRunning {
+		logStep("Stopping git-auto-sync-daemon")
+		if err := srv.Service.Stop(); err != nil {
+			return tracerr.Wrap(err)
+		}
+	}
+
 	logStep("Uninstalling git-auto-sync as a daemon")
-	err = srv.Service.Uninstall()
-	if err != nil {
+	if err := srv.Service.Uninstall(); err != nil {
 		return tracerr.Wrap(err)
 	}
 

@@ -164,6 +164,11 @@ func main() {
 						Action: daemonRestart,
 					},
 					{
+						Name:   "uninstall",
+						Usage:  "Uninstall the daemon service",
+						Action: daemonUninstall,
+					},
+					{
 						Name:    "list",
 						Aliases: []string{"ls"},
 						Usage:   "List of repos being auto-synced",

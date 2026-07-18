@@ -9,6 +9,9 @@ builds:
     id: git-auto-sync
     env:
       - CGO_ENABLED=0
+      - RELEASE=true
+    ldflags:
+      - -s -w
     goos:
       - linux
       - windows
@@ -22,6 +25,9 @@ builds:
     dir: daemon
     env:
       - CGO_ENABLED=0
+      - RELEASE=true
+    ldflags:
+      - -s -w
     goos:
       - linux
       - windows
@@ -38,6 +44,9 @@ builds:
       - CGO_ENABLED=1
       - CC=clang
       - CXX=clang++
+      - RELEASE=true
+    ldflags:
+      - -s -w
     goos:
       - darwin
     goarch:
@@ -51,6 +60,9 @@ builds:
       - CGO_ENABLED=1
       - CC=clang
       - CXX=clang++
+      - RELEASE=true
+    ldflags:
+      - -s -w
     goos:
       - darwin
     goarch:

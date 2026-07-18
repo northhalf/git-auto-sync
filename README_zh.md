@@ -66,7 +66,7 @@ make
 Git Auto Sync 提供两种工作模式：
 
 - **手动模式**：`git-auto-sync sync` 立即执行一次完整同步流程。
-- **守护模式**：`git-auto-sync daemon add <仓库路径>` 启动后台服务，持续监控仓库。
+- **守护模式**：`git-auto-sync daemon add <仓库路径>` 启动后台服务，持续监控仓库。`daemon run`、`daemon stop` 和 `daemon uninstall` 控制服务的启动、停止与卸载。
 - **设置**：`git-auto-sync config <键> [值]` 读取、设置或删除 `syncInterval`、`debounce`、`gitexec`，支持 `--global`（默认）或 `--local` 作用域。
 
 运行 `git-auto-sync --help` 或 `git-auto-sync daemon --help` 查看所有命令。

@@ -27,3 +27,5 @@ jobs:
           args: release --rm-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Release builds strip debug symbols via `-s -w` (see .goreleaser.yaml ldflags).
+          RELEASE: "true"

@@ -195,6 +195,44 @@ func daemonRestart(ctx *cli.Context) error {
 	return nil
 }
 
+// @description    Uninstalls the daemon service.
+//
+// daemonUninstall stops and removes the daemon service, reporting the outcome. The monitored
+// repository list and environment configuration are preserved so a later `daemon add` or
+// `daemon run` picks them up again. When the service is not installed it reports that state without
+// attempting an uninstall, matching the stop and restart commands.
+//
+// @param           ctx    "CLI context for the daemon uninstall command"
+//
+// @return          error  "nil on success or when not installed, or an error building, querying, or disabling the service"
+func daemonUninstall(ctx *cli.Context) error {
+	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	status, queryErr := s.Status()
+	if queryErr != nil {
+		if errors.Is(queryErr, daemonservice.ErrNotInstalled) {
+			fmt.Println("git-auto-sync-daemon is NOT installed")
+			return nil
+		}
+		return tracerr.Wrap(queryErr)
+	}
+
+	if status == service.StatusRunning {
+		fmt.Println("git-auto-sync-daemon is running; stopping before uninstall")
+	}
+
+	if err := s.Disable(); err != nil {
+		fmt.Println("git-auto-sync-daemon failed to uninstall")
+		return tracerr.Wrap(err)
+	}
+
+	fmt.Println("git-auto-sync-daemon uninstalled successfully")
+	return nil
+}
+
 // @description    daemonList prints each monitored repository with its runtime status.
 //
 // daemonList reads the daemon configuration and state file and prints the daemon service status
