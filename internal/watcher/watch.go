@@ -58,7 +58,7 @@ func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoCo
 	defer notify.Stop(notifyChannel)
 
 	awakeChannel := make(chan bool, 100)
-	notifier, err := NewAwakeNotifier()
+	notifier, err := NewAwakeNotifier(logger)
 	if err != nil {
 		logger.Error("watcher failed", "operation", "create awake notifier", "error", err)
 		return tracerr.Wrap(err)

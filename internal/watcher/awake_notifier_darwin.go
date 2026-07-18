@@ -2,26 +2,33 @@ package watcher
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/prashantgupta24/mac-sleep-notifier/notifier"
 )
 
+// AwakeNotifierDarwn forwards Darwin suspend-and-resume wake events from the system IOKit
+// notification source.
 type AwakeNotifierDarwn struct {
-	n *notifier.Notifier
+	logger *slog.Logger
+	n      *notifier.Notifier
 }
 
 // @description    Creates the Darwin wake notifier.
 //
 // NewAwakeNotifier creates a Darwin notifier backed by the system suspend-and-resume notification
-// source.
+// source. The logger is retained for parity with the Linux and Windows notifiers but is unused
+// because construction never fails.
+//
+// @param           logger  "repository-scoped logger retained for signature parity"
 //
 // @return          *AwakeNotifierDarwn  "notifier that reports system wake events"
 //
 // @return          error                "always nil"
-func NewAwakeNotifier() (*AwakeNotifierDarwn, error) {
+func NewAwakeNotifier(logger *slog.Logger) (*AwakeNotifierDarwn, error) {
 	n := notifier.GetInstance()
 
-	return &AwakeNotifierDarwn{n: n}, nil
+	return &AwakeNotifierDarwn{logger: logger, n: n}, nil
 }
 
 // @description    Forwards Darwin wake events until cancellation.
