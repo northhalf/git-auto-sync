@@ -217,20 +217,23 @@ func Test_RecorderSetDedupesLastSynced(t *testing.T) {
 	r.Set("/repo", StatusRunning, "", first)
 	got, err := ReadState()
 	assert.NilError(t, err)
-	assert.Equal(t, got.Repos[0].LastSyncedAt, first)
+	// Compare instants with Time.Equal, not assert.Equal: got.LastSyncedAt round-trips through
+	// state.json and carries the UTC location, while first carries time.Local, and assert.Equal
+	// uses == (Location pointer comparison), which flakes under TZ=UTC.
+	assert.Assert(t, got.Repos[0].LastSyncedAt.Equal(first))
 
 	// A newer LastSyncedAt with identical status and stage writes.
 	second := time.Unix(2000, 0)
 	r.Set("/repo", StatusRunning, "", second)
 	got, err = ReadState()
 	assert.NilError(t, err)
-	assert.Equal(t, got.Repos[0].LastSyncedAt, second)
+	assert.Assert(t, got.Repos[0].LastSyncedAt.Equal(second))
 
 	// The same LastSyncedAt is a no-op: LastSyncedAt is unchanged and the on-disk value stays second.
 	r.Set("/repo", StatusRunning, "", second)
 	got, err = ReadState()
 	assert.NilError(t, err)
-	assert.Equal(t, got.Repos[0].LastSyncedAt, second)
+	assert.Assert(t, got.Repos[0].LastSyncedAt.Equal(second))
 }
 
 // @description    Verifies persistLocked preserves a newer on-disk LastSyncedAt.
