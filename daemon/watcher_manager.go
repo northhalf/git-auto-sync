@@ -158,7 +158,7 @@ func (m *watcherManager) onState(repoPath string) func(watcher.StateReport) {
 			status = daemonstate.StatusPaused
 			stage = r.Stage
 		}
-		recorder.Set(repoPath, status, stage)
+		recorder.Set(repoPath, status, stage, r.LastSyncedAt)
 	}
 }
 

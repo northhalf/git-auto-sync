@@ -14,6 +14,7 @@ import (
 	"github.com/ztrue/tracerr"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/northhalf/git-auto-sync/internal/daemonstate"
 	"github.com/northhalf/git-auto-sync/internal/logging"
 	"github.com/northhalf/git-auto-sync/internal/syncer"
 	"github.com/northhalf/git-auto-sync/internal/watcher"
@@ -100,6 +101,10 @@ func main() {
 					err = syncer.AutoSync(logging.WithRepo(repoPath), cfg)
 					if err != nil {
 						return tracerr.Wrap(err)
+					}
+
+					if recordErr := daemonstate.RecordSyncSuccess(repoPath); recordErr != nil {
+						slog.Warn("record sync success failed", "error", recordErr)
 					}
 
 					return nil

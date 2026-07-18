@@ -60,7 +60,7 @@ func Test_StateRoundTrip(t *testing.T) {
 	setupState(t)
 
 	want := &State{Repos: []RepoStatus{
-		{Repo: "/repo/a", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0)},
+		{Repo: "/repo/a", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0), LastSyncedAt: time.Unix(1500, 0)},
 		{Repo: "/repo/b", Status: StatusPaused, Stage: "rebase", UpdatedAt: time.Unix(2000, 0)},
 	}}
 	assert.NilError(t, WriteState(want))
@@ -127,7 +127,7 @@ func Test_RecorderSetPersistsAndDedupes(t *testing.T) {
 	setupState(t)
 	r := NewRecorder()
 
-	r.Set("/repo", StatusRunning, "")
+	r.Set("/repo", StatusRunning, "", time.Time{})
 	first, err := ReadState()
 	assert.NilError(t, err)
 	assert.Equal(t, len(first.Repos), 1)
@@ -136,13 +136,13 @@ func Test_RecorderSetPersistsAndDedupes(t *testing.T) {
 
 	// An identical report must not refresh UpdatedAt.
 	time.Sleep(10 * time.Millisecond)
-	r.Set("/repo", StatusRunning, "")
+	r.Set("/repo", StatusRunning, "", time.Time{})
 	second, err := ReadState()
 	assert.NilError(t, err)
 	assert.Equal(t, second.Repos[0].UpdatedAt, firstUpdated)
 
 	// A changed status updates the entry and refreshes UpdatedAt.
-	r.Set("/repo", StatusPaused, "rebase")
+	r.Set("/repo", StatusPaused, "rebase", time.Time{})
 	third, err := ReadState()
 	assert.NilError(t, err)
 	assert.Equal(t, third.Repos[0].Status, StatusPaused)
@@ -166,7 +166,7 @@ func Test_RecorderHeartbeat(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, mod.IsZero(), "Heartbeat with no repos should not write a state file")
 
-	r.Set("/repo", StatusRunning, "")
+	r.Set("/repo", StatusRunning, "", time.Time{})
 	before, err := ReadState()
 	assert.NilError(t, err)
 
@@ -186,8 +186,8 @@ func Test_RecorderHeartbeat(t *testing.T) {
 func Test_RecorderRemove(t *testing.T) {
 	setupState(t)
 	r := NewRecorder()
-	r.Set("/repo/a", StatusRunning, "")
-	r.Set("/repo/b", StatusPaused, "commit")
+	r.Set("/repo/a", StatusRunning, "", time.Time{})
+	r.Set("/repo/b", StatusPaused, "commit", time.Time{})
 
 	r.Remove("/repo/a")
 	got, err := ReadState()
@@ -200,6 +200,113 @@ func Test_RecorderRemove(t *testing.T) {
 	got, err = ReadState()
 	assert.NilError(t, err)
 	assert.Equal(t, len(got.Repos), 1)
+}
+
+// @description    Verifies Recorder.Set dedup covers LastSyncedAt.
+//
+// Test_RecorderSetDedupesLastSynced verifies that a Set carrying a new LastSyncedAt writes state.json
+// even when the status and stage are unchanged, and that a Set with the same LastSyncedAt as the
+// current entry is a no-op.
+//
+// @param           t  "test handle used for isolated setup and assertions"
+func Test_RecorderSetDedupesLastSynced(t *testing.T) {
+	setupState(t)
+	r := NewRecorder()
+
+	first := time.Unix(1000, 0)
+	r.Set("/repo", StatusRunning, "", first)
+	got, err := ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, got.Repos[0].LastSyncedAt, first)
+
+	// A newer LastSyncedAt with identical status and stage writes.
+	second := time.Unix(2000, 0)
+	r.Set("/repo", StatusRunning, "", second)
+	got, err = ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, got.Repos[0].LastSyncedAt, second)
+
+	// The same LastSyncedAt is a no-op: LastSyncedAt is unchanged and the on-disk value stays second.
+	r.Set("/repo", StatusRunning, "", second)
+	got, err = ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, got.Repos[0].LastSyncedAt, second)
+}
+
+// @description    Verifies persistLocked preserves a newer on-disk LastSyncedAt.
+//
+// Test_RecorderPreservesDiskLastSynced writes a state.json whose LastSyncedAt is newer than the
+// recorder's in-memory value, then triggers a persist through Set. The merge in persistLocked must
+// keep the newer on-disk timestamp, simulating a CLI sync that landed between daemon writes.
+//
+// @param           t  "test handle used for isolated setup and assertions"
+func Test_RecorderPreservesDiskLastSynced(t *testing.T) {
+	setupState(t)
+
+	// Seed the recorder with an older LastSyncedAt.
+	r := NewRecorder()
+	r.Set("/repo", StatusRunning, "", time.Unix(1000, 0))
+
+	// A separate process (the CLI) writes a newer LastSyncedAt directly to state.json.
+	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+		{Repo: "/repo", Status: StatusRunning, UpdatedAt: time.Unix(1500, 0), LastSyncedAt: time.Unix(5000, 0)},
+	}}))
+
+	// The daemon persists again (e.g. heartbeat-driven Set with zero lastSynced). The newer on-disk
+	// LastSyncedAt must survive.
+	r.Set("/repo", StatusRunning, "", time.Time{})
+	got, err := ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, got.Repos[0].LastSyncedAt.Unix(), int64(5000))
+}
+
+// @description    Verifies RecordSyncSuccess merges LastSyncedAt into state.json.
+//
+// Test_RecordSyncSuccess covers the three cases the CLI sync command exercises: an existing entry
+// keeps its status, stage, and UpdatedAt and gains a fresh LastSyncedAt; a missing entry creates a
+// running entry; and the call works when no state file exists yet.
+//
+// @param           t  "test handle used for isolated setup and assertions"
+func Test_RecordSyncSuccess(t *testing.T) {
+	t.Run("existing entry preserves runtime fields", func(t *testing.T) {
+		setupState(t)
+		assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+			{Repo: "/repo", Status: StatusPaused, Stage: "rebase", UpdatedAt: time.Unix(1000, 0)},
+		}}))
+
+		assert.NilError(t, RecordSyncSuccess("/repo"))
+		got, err := ReadState()
+		assert.NilError(t, err)
+		assert.Equal(t, len(got.Repos), 1)
+		assert.Equal(t, got.Repos[0].Status, StatusPaused)
+		assert.Equal(t, got.Repos[0].Stage, "rebase")
+		assert.Equal(t, got.Repos[0].UpdatedAt.Unix(), int64(1000))
+		assert.Assert(t, !got.Repos[0].LastSyncedAt.IsZero(), "LastSyncedAt should be set")
+	})
+
+	t.Run("missing entry creates running entry", func(t *testing.T) {
+		setupState(t)
+		assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+			{Repo: "/other", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0)},
+		}}))
+
+		assert.NilError(t, RecordSyncSuccess("/repo"))
+		got, err := ReadState()
+		assert.NilError(t, err)
+		assert.Equal(t, len(got.Repos), 2)
+		assert.Equal(t, got.Repos[1].Repo, "/repo")
+		assert.Equal(t, got.Repos[1].Status, StatusRunning)
+		assert.Assert(t, !got.Repos[1].LastSyncedAt.IsZero(), "LastSyncedAt should be set")
+	})
+
+	t.Run("no state file", func(t *testing.T) {
+		setupState(t)
+		assert.NilError(t, RecordSyncSuccess("/repo"))
+		got, err := ReadState()
+		assert.NilError(t, err)
+		assert.Equal(t, len(got.Repos), 1)
+		assert.Assert(t, !got.Repos[0].LastSyncedAt.IsZero(), "LastSyncedAt should be set")
+	})
 }
 
 // @description    Verifies staleness detection.

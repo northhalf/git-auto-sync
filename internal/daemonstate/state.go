@@ -36,11 +36,16 @@ const (
 // RepoStatus is one repository's runtime status as persisted to state.json. Stage records the
 // synchronization stage that caused a pause (author, commit, compare, rebase, alert) and is empty
 // while running. UpdatedAt is refreshed by the daemon heartbeat so the CLI can detect staleness.
+// LastSyncedAt records the time of the most recent successful synchronization; the zero value means
+// the repository has never completed a sync. The daemon refreshes it on every successful AutoSync,
+// and the CLI sync command refreshes it via RecordSyncSuccess, so the timestamp survives across
+// both writer processes through the merge in persistLocked.
 type RepoStatus struct {
-	Repo      string    `json:"repo"`
-	Status    Status    `json:"status"`
-	Stage     string    `json:"stage,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Repo         string    `json:"repo"`
+	Status       Status    `json:"status"`
+	Stage        string    `json:"stage,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	LastSyncedAt time.Time `json:"lastSyncedAt,omitempty"`
 }
 
 // State is the complete contents of state.json: the runtime status of every monitored repository.
@@ -157,8 +162,49 @@ func WriteState(state *State) error {
 	return nil
 }
 
-// @description    Reports the state file modification time.
+// @description    Records a successful sync for a repository.
 //
+// RecordSyncSuccess reads state.json, sets repo's LastSyncedAt to the current time, and writes the
+// state back atomically. When repo already has an entry, its Status, Stage, and UpdatedAt are
+// preserved so a manual CLI sync does not clobber the daemon's runtime status; only LastSyncedAt
+// moves forward. When repo has no entry, a running entry is created with UpdatedAt set to the
+// current time so a subsequent status read does not treat it as stale. It is intended for the CLI
+// sync command, a separate process from the daemon, so it always round-trips through the file and
+// never trusts an in-memory copy.
+//
+// @param           repo   "repository path whose successful sync is being recorded"
+//
+// @return          error  "nil on success, or an error reading or writing the state file"
+func RecordSyncSuccess(repo string) error {
+	state, err := ReadState()
+	if err != nil {
+		return tracerr.Wrap(err)
+	}
+
+	now := time.Now()
+	updated := false
+	for i := range state.Repos {
+		if state.Repos[i].Repo == repo {
+			state.Repos[i].LastSyncedAt = now
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		state.Repos = append(state.Repos, RepoStatus{
+			Repo:         repo,
+			Status:       StatusRunning,
+			UpdatedAt:    now,
+			LastSyncedAt: now,
+		})
+	}
+
+	if err := WriteState(state); err != nil {
+		return tracerr.Wrap(err)
+	}
+	return nil
+}
+
 // StateModTime stats state.json and returns its modification time. It returns the zero time with a
 // nil error when the file does not exist so callers can treat a missing file as an empty, unchanged
 // state.

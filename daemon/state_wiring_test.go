@@ -90,7 +90,7 @@ func Test_ReconcileRemovesStateOnExit(t *testing.T) {
 		start:    fs.start,
 		recorder: daemonstate.NewRecorder(),
 	}
-	m.recorder.Set("/repo", daemonstate.StatusPaused, "rebase")
+	m.recorder.Set("/repo", daemonstate.StatusPaused, "rebase", time.Time{})
 
 	// Start the fake watcher, then simulate its exit and removal from the config.
 	m.reconcile([]string{"/repo"}, nil)

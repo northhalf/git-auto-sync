@@ -17,10 +17,13 @@ const (
 // StateReport is the runtime status a watcher reports on state transitions. Paused is true when the
 // watcher halted after a non-remote error needing user intervention; Stage carries the failed
 // synchronization stage in that case and is empty while running. Remote-failure backoff is reported
-// as running because it auto-recovers.
+// as running because it auto-recovers. LastSyncedAt carries the time of the most recent successful
+// sync on a running report that follows a successful AutoSync, and the zero time on the watcher's
+// initial report and on paused reports, so a never-synced repository reads as "never synced".
 type StateReport struct {
-	Paused bool
-	Stage  string
+	Paused       bool
+	Stage        string
+	LastSyncedAt time.Time
 }
 
 type watchDependencies struct {
@@ -194,7 +197,7 @@ func runWatchLoop(
 				}
 				mode = watchModeNormal
 				remoteFailures = 0
-				report(StateReport{Paused: false})
+				report(StateReport{Paused: false, LastSyncedAt: time.Now()})
 				if pendingSync {
 					pendingSync = false
 					requestDebouncedSync()

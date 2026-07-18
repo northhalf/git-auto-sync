@@ -3,11 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kardianos/service"
 	cfg "github.com/northhalf/git-auto-sync/internal/config"
@@ -85,9 +89,7 @@ func daemonStatus(ctx *cli.Context) error {
 
 	fmt.Println("Monitoring - ")
 	now := time.Now()
-	for _, repoPath := range settings.Repos {
-		fmt.Printf("  %s  -  %s\n", repoPath, repoStatusText(repoPath, state, now))
-	}
+	printRepos(os.Stdout, settings.Repos, state, now, "  ")
 
 	return nil
 }
@@ -259,9 +261,7 @@ func daemonList(ctx *cli.Context) error {
 		fmt.Println("No repository be added")
 		return nil
 	}
-	for _, repoPath := range settings.Repos {
-		fmt.Printf("%s  -  %s\n", repoPath, repoStatusText(repoPath, state, now))
-	}
+	printRepos(os.Stdout, settings.Repos, state, now, "")
 	return nil
 }
 
@@ -294,11 +294,12 @@ func daemonServiceStatus() string {
 	}
 }
 
-// @description    Returns the human-readable status of a repository.
+// @description    Returns the human-readable status label of a repository.
 //
-// repoStatusText looks up repoPath in the daemon state and returns "running", "paused (<reason>)",
-// or "unknown (daemon may not be running)" when the entry is stale, missing, or the daemon is not
-// refreshing state.
+// repoStatus looks up repoPath in the daemon state and returns "running", "paused (<reason>)", or
+// "unknown (daemon may not be running)" when the entry is stale, missing, or the daemon is not
+// refreshing state. It does not include the last-sync segment, which is formatted separately so the
+// caller can column-align the status and sync fields independently.
 //
 // @param           repoPath  "repository path to look up"
 //
@@ -306,8 +307,8 @@ func daemonServiceStatus() string {
 //
 // @param           now       "reference time for staleness, typically the current time"
 //
-// @return          string    "human-readable repository status"
-func repoStatusText(repoPath string, state *daemonstate.State, now time.Time) string {
+// @return          string    "human-readable repository status label"
+func repoStatus(repoPath string, state *daemonstate.State, now time.Time) string {
 	for _, r := range state.Repos {
 		if r.Repo != repoPath {
 			continue
@@ -321,6 +322,163 @@ func repoStatusText(repoPath string, state *daemonstate.State, now time.Time) st
 		return "running"
 	}
 	return "unknown (daemon may not be running)"
+}
+
+// @description    Returns the last-sync segment for a repository.
+//
+// repoLastSynced looks up repoPath in the daemon state and returns the formatted last-sync segment,
+// or an empty string when the entry is stale or missing, since a stale or absent entry gives no
+// trustworthy sync time. A fresh entry with a zero LastSyncedAt returns "never synced".
+//
+// @param           repoPath  "repository path to look up"
+//
+// @param           state     "daemon state read from state.json"
+//
+// @param           now       "reference time for the relative component, typically the current time"
+//
+// @return          string    "formatted last-sync segment, or empty when the entry is stale or missing"
+func repoLastSynced(repoPath string, state *daemonstate.State, now time.Time) string {
+	for _, r := range state.Repos {
+		if r.Repo != repoPath {
+			continue
+		}
+		if r.IsStale(now) {
+			return ""
+		}
+		return formatLastSynced(r.LastSyncedAt, now)
+	}
+	return ""
+}
+
+// @description    Formats a last-sync time for display.
+//
+// formatLastSynced returns "never synced" when last is the zero time, otherwise
+// "synced <absolute> (<relative> ago)" using local time. The absolute timestamp is fixed-width; the
+// relative suffix varies, so the right edge is intentionally ragged rather than padded.
+//
+// @param           last  "last successful sync time, or the zero time when never synced"
+//
+// @param           now   "reference time for the relative component, typically the current time"
+//
+// @return          string "formatted last-sync segment"
+func formatLastSynced(last, now time.Time) string {
+	if last.IsZero() {
+		return "never synced"
+	}
+	abs := last.Local().Format("2006-01-02 15:04:05")
+	return "synced " + abs + " (" + humanDuration(now.Sub(last)) + " ago)"
+}
+
+// @description    Renders a duration as a compound human-readable string.
+//
+// humanDuration formats d as a compound "<D>d<H>h<M>m<S>s" string, omitting leading zero parts so
+// only present units appear. Seconds are dropped once a minute or coarser unit is present, so 5m30s
+// reads as "5m". Durations of 7 days or more collapse to just "<D>d", dropping the hour, minute, and
+// second components. Durations under a minute read as "<S>s"; the zero duration reads as "0s".
+// Negative durations, which arise only from clock skew on a future LastSyncedAt, are clamped to "0s".
+//
+// @param           d     "elapsed time since the last sync"
+//
+// @return          string "compound human-readable duration label"
+func humanDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d >= 7*24*time.Hour {
+		return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+	}
+
+	days := int(d / (24 * time.Hour))
+	rem := d % (24 * time.Hour)
+	hours := int(rem / time.Hour)
+	rem = rem % time.Hour
+	minutes := int(rem / time.Minute)
+	rem = rem % time.Minute
+	seconds := int(rem / time.Second)
+
+	var b strings.Builder
+	if days > 0 {
+		b.WriteString(strconv.Itoa(days))
+		b.WriteByte('d')
+	}
+	if hours > 0 {
+		b.WriteString(strconv.Itoa(hours))
+		b.WriteByte('h')
+	}
+	if minutes > 0 {
+		b.WriteString(strconv.Itoa(minutes))
+		b.WriteByte('m')
+	}
+	// Seconds appear only when no coarser unit is present (duration under a minute).
+	if days == 0 && hours == 0 && minutes == 0 {
+		b.WriteString(strconv.Itoa(seconds))
+		b.WriteByte('s')
+	}
+	if b.Len() == 0 {
+		return "0s"
+	}
+	return b.String()
+}
+
+// @description    Pads a string with trailing spaces to a rune width.
+//
+// padRight returns s followed by enough spaces that its rune count reaches width. Strings already at
+// or beyond width are returned unchanged. Width is measured in runes so multi-byte paths align on the
+// rune grid; it does not account for East-Asian full-width glyphs, which is acceptable for filesystem
+// paths and keeps the implementation stdlib-only.
+//
+// @param           s      "string to pad"
+//
+// @param           width  "target rune count"
+//
+// @return          string "s padded to width runes, or s unchanged when already at or beyond width"
+func padRight(s string, width int) string {
+	n := utf8.RuneCountInString(s)
+	if n >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-n)
+}
+
+// @description    Prints monitored repositories with aligned columns.
+//
+// printRepos writes one line per repository path to w, aligning the path and status columns to the
+// widest entry so the separators line up. Lines whose status is "unknown (daemon may not be running)"
+// omit the last-sync segment, since a stale or absent entry carries no trustworthy sync time. indent
+// is prepended to every line so the status command can nest rows under its header while the list
+// command prints flush-left.
+//
+// @param           w       "writer that receives the formatted repository lines"
+//
+// @param           repos   "repository paths to print, in display order"
+//
+// @param           state   "daemon state read from state.json"
+//
+// @param           now     "reference time for staleness and relative durations"
+//
+// @param           indent  "prefix prepended to each repository line"
+func printRepos(w io.Writer, repos []string, state *daemonstate.State, now time.Time, indent string) {
+	maxPathW, maxStatusW := 0, 0
+	statuses := make([]string, len(repos))
+	synced := make([]string, len(repos))
+	for i, repoPath := range repos {
+		statuses[i] = repoStatus(repoPath, state, now)
+		synced[i] = repoLastSynced(repoPath, state, now)
+		if w := utf8.RuneCountInString(repoPath); w > maxPathW {
+			maxPathW = w
+		}
+		if w := utf8.RuneCountInString(statuses[i]); w > maxStatusW {
+			maxStatusW = w
+		}
+	}
+
+	for i, repoPath := range repos {
+		line := indent + padRight(repoPath, maxPathW) + "  -  " + padRight(statuses[i], maxStatusW)
+		if synced[i] != "" {
+			line += "  -  " + synced[i]
+		}
+		_, _ = fmt.Fprintln(w, line)
+	}
 }
 
 // @description    Maps a paused synchronization stage to a reason.
