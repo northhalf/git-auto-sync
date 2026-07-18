@@ -44,6 +44,14 @@ mkdir -p ~/.local/share/git-auto-sync
 tar -xzf git-auto-sync_*_Linux_x86_64.tar.gz -C ~/.local/share/git-auto-sync
 ```
 
+On Linux and macOS, make both extracted binaries executable before running them:
+
+```bash
+chmod +x /path/to/binaries/git-auto-sync /path/to/binaries/git-auto-sync-daemon
+```
+
+Without the executable permission, the shell cannot run the files even if their directory is on `PATH`.
+
 </details>
 
 <details>

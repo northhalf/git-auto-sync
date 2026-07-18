@@ -44,6 +44,14 @@ mkdir -p ~/.local/share/git-auto-sync
 tar -xzf git-auto-sync_*_Linux_x86_64.tar.gz -C ~/.local/share/git-auto-sync
 ```
 
+在 Linux 和 macOS 上，运行前为解压出的两个二进制添加可执行权限：
+
+```bash
+chmod +x /path/to/binaries/git-auto-sync /path/to/binaries/git-auto-sync-daemon
+```
+
+如果没有可执行权限，即使目录已加入 `PATH`，shell 也无法运行这些文件。
+
 </details>
 
 <details>
