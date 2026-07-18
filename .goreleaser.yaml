@@ -1,3 +1,5 @@
+version: 2
+
 project_name: git-auto-sync
 
 before:
@@ -69,22 +71,32 @@ builds:
       - amd64
       - arm64
 archives:
-  - replacements:
-      darwin: Darwin
-      linux: Linux
-      windows: Windows
-      386: i386
-      amd64: x86_64
+  # Windows ships as zip; Linux/macOS as tar.gz.
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: |-
+      {{- .ProjectName -}}_
+      {{- .Version -}}_
+      {{- title .Os -}}_
+      {{- if eq .Arch "amd64" -}}x86_64
+      {{- else if eq .Arch "386" -}}i386
+      {{- else -}}{{ .Arch }}{{- end -}}
+      {{- with .Arm -}}v{{ . }}{{- end -}}
     files:
       - LICENSE
       - README.md
       - README_zh.md
       - completions/bash_autocomplete
       - completions/zsh_autocomplete
+      - completions/powershell_autocomplete.ps1
 checksum:
   name_template: "checksums.txt"
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
   filters:

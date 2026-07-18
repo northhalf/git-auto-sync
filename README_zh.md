@@ -25,11 +25,29 @@ Git Auto Sync 面向个人仓库：与上游保持一致比提交历史是否整
 
 ### 环境要求
 
-- Go 1.25 或更高版本
 - Git
 - 已配置的 Git 身份（`user.name` 和 `user.email`）
+- 从源码构建还需要 Go 1.25 或更高版本
 
-### 编译
+### 获取二进制
+
+从以下两种方式中任选一种。
+
+<details>
+<summary><b>方式 A - 从 release 下载</b></summary>
+
+从 [releases 页面](https://github.com/northhalf/git-auto-sync/releases/latest) 下载对应平台的归档并解压。每个归档包含两个二进制（`git-auto-sync`、`git-auto-sync-daemon`；Windows 下为 `.exe`）以及一个 `completions/` 目录，内含各 shell 的补全脚本。
+
+```bash
+# 示例：把 Linux x86_64 的 release 解压到 ~/.local/share/git-auto-sync
+mkdir -p ~/.local/share/git-auto-sync
+tar -xzf git-auto-sync_*_Linux_x86_64.tar.gz -C ~/.local/share/git-auto-sync
+```
+
+</details>
+
+<details>
+<summary><b>方式 B - 从源码构建</b></summary>
 
 ```bash
 git clone https://github.com/northhalf/git-auto-sync.git
@@ -37,14 +55,43 @@ cd git-auto-sync
 make
 ```
 
-编译完成后，`git-auto-sync` 和 `git-auto-sync-daemon` 会位于 `./bin` 目录。
+`git-auto-sync` 和 `git-auto-sync-daemon` 会构建到 `./bin` 目录。补全脚本位于 `completions/`。
+
+</details>
+
+### 把程序目录加入 PATH
+
+无论用哪种方式，都要把存放二进制的目录加入 `PATH`，这样可以直接运行 `git-auto-sync`：
+
+```bash
+# Linux / macOS - 加入 ~/.bashrc 或 ~/.zshrc
+export PATH="$PATH:/path/to/binaries"
+
+# Windows (PowerShell) - 为当前用户设置
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\path\to\binaries", "User")
+```
+
+### Shell 补全（可选）
+
+`completions/` 目录提供了 bash、zsh 和 PowerShell 的补全脚本。按你的 shell 加载对应脚本（把 `/path/to/completions/` 替换为实际路径 - release 解压后的 `completions/`，或克隆仓库里的 `completions/`）：
+
+```bash
+# bash - 加入 ~/.bashrc。需要安装 bash-completion 包。
+source /path/to/completions/bash_autocomplete
+
+# zsh - 加入 ~/.zshrc，或把文件放到 $fpath 中的某个目录
+source /path/to/completions/zsh_autocomplete
+
+# PowerShell - 在你的 profile 中 dot-source
+. C:\path\to\completions\powershell_autocomplete.ps1
+```
 
 ### 手动同步
 
 在任意 Git 仓库中执行：
 
 ```bash
-/path/to/bin/git-auto-sync sync
+git-auto-sync sync
 ```
 
 这会提交符合条件的改动、拉取所有远程、变基到配置的上游分支并推送。
@@ -54,13 +101,13 @@ make
 注册需要持续监控的仓库：
 
 ```bash
-/path/to/bin/git-auto-sync daemon add /path/to/repo
+git-auto-sync daemon add /path/to/repo
 ```
 
 查看状态：
 
 ```bash
-/path/to/bin/git-auto-sync daemon status
+git-auto-sync daemon status
 ```
 
 守护进程会监听文件系统、按配置的间隔轮询，并自动同步。

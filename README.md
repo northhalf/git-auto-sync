@@ -25,11 +25,29 @@ Git Auto Sync is built for personal repositories where keeping a working copy in
 
 ### Prerequisites
 
-- Go 1.25 or newer
 - Git
 - A configured Git identity (`user.name` and `user.email`) for commits
+- Building from source additionally requires Go 1.25 or newer
 
-### Build
+### Get the binaries
+
+Choose one of the following two methods.
+
+<details>
+<summary><b>Option A - Download a release</b></summary>
+
+Download the archive for your platform from the [releases page](https://github.com/northhalf/git-auto-sync/releases/latest) and extract it. Each archive contains the two binaries (`git-auto-sync`, `git-auto-sync-daemon`; with `.exe` on Windows) and a `completions/` folder with the shell completion scripts.
+
+```bash
+# Example: extract a Linux x86_64 release into ~/.local/share/git-auto-sync
+mkdir -p ~/.local/share/git-auto-sync
+tar -xzf git-auto-sync_*_Linux_x86_64.tar.gz -C ~/.local/share/git-auto-sync
+```
+
+</details>
+
+<details>
+<summary><b>Option B - Build from source</b></summary>
 
 ```bash
 git clone https://github.com/northhalf/git-auto-sync.git
@@ -37,14 +55,43 @@ cd git-auto-sync
 make
 ```
 
-Both `git-auto-sync` and `git-auto-sync-daemon` are built into `./bin`.
+Both `git-auto-sync` and `git-auto-sync-daemon` are built into `./bin`. Completion scripts live in `completions/`.
+
+</details>
+
+### Add the program directory to your PATH
+
+Whichever method you used, put the directory holding the binaries on your `PATH` so you can invoke `git-auto-sync` directly:
+
+```bash
+# Linux / macOS - add to ~/.bashrc or ~/.zshrc
+export PATH="$PATH:/path/to/binaries"
+
+# Windows (PowerShell) - set for the current user
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\path\to\binaries", "User")
+```
+
+### Shell completion (optional)
+
+The `completions/` folder ships scripts for bash, zsh, and PowerShell. Source the one for your shell (replace `/path/to/completions/` with the actual path - the `completions/` folder from the release archive, or `completions/` in the cloned repo):
+
+```bash
+# bash - add to ~/.bashrc. Requires the bash-completion package.
+source /path/to/completions/bash_autocomplete
+
+# zsh - add to ~/.zshrc, or drop the file into a directory on your $fpath
+source /path/to/completions/zsh_autocomplete
+
+# PowerShell - dot-source from your profile
+. C:\path\to\completions\powershell_autocomplete.ps1
+```
 
 ### Manual sync
 
 Run inside any Git repository:
 
 ```bash
-/path/to/bin/git-auto-sync sync
+git-auto-sync sync
 ```
 
 This commits eligible changes, fetches all remotes, rebases onto the configured upstream branch, and pushes.
@@ -54,13 +101,13 @@ This commits eligible changes, fetches all remotes, rebases onto the configured 
 Register a repository for continuous monitoring:
 
 ```bash
-/path/to/bin/git-auto-sync daemon add /path/to/repo
+git-auto-sync daemon add /path/to/repo
 ```
 
 Check status:
 
 ```bash
-/path/to/bin/git-auto-sync daemon status
+git-auto-sync daemon status
 ```
 
 The daemon watches the filesystem, polls every configured interval, and syncs automatically.
