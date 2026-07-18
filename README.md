@@ -124,9 +124,10 @@ Run `git-auto-sync --help` or `git-auto-sync daemon --help` for all commands.
 
 ### Repository configuration
 
-Settings live at two scopes: global (in `~/.config/git-auto-sync/config.json`) and per-repository
-(in the Git config section `[auto-sync]`). Repository settings override global settings, which
-override defaults. Time units are minutes.
+Settings live at two scopes: global (in the platform config file, e.g.
+`~/.config/git-auto-sync/config.json` on Linux - see [File locations](#file-locations)) and
+per-repository (in the Git config section `[auto-sync]`). Repository settings override global
+settings, which override defaults. Time units are minutes.
 
 ```bash
 git-auto-sync config syncInterval 60          # minutes, default 60 (global)
@@ -187,6 +188,35 @@ If your repository uses Git LFS, install the `git-lfs` extension yourself so Git
 
 The CLI and daemon use separate rotating log files. Multiple CLI processes, such as a running `watch` command and a manual `sync`, still write to the same `git-auto-sync.log` file. The rotation library does not coordinate across processes, so concurrent CLI processes may exceed the configured rotation size or lose log records during rotation.
 
+### File locations
+
+Git Auto Sync stores configuration and logs in platform-specific directories.
+
+**Configuration** - the global settings file holds `repos`, `envs`, `syncInterval`, `debounce`, and `gitexec`:
+
+| Platform | Path |
+| --- | --- |
+| Linux | `~/.config/git-auto-sync/config.json` |
+| macOS | `~/Library/Application Support/git-auto-sync/config.json` |
+| Windows | `%AppData%\git-auto-sync\config.json` |
+
+Per-repository settings are stored in the repository's own Git config under the `[auto-sync]` section, not in this file.
+
+**Logs** - the CLI and daemon each write a rotating log file (10 MB per file, 3 backups retained):
+
+| Platform | Directory |
+| --- | --- |
+| Linux | `~/.local/share/git-auto-sync/log/` |
+| macOS | `~/Library/Logs/` |
+| Windows | `%LOCALAPPDATA%\git-auto-sync\logs\` |
+
+| File | Writer |
+| --- | --- |
+| `git-auto-sync.log` | `git-auto-sync` CLI |
+| `git-auto-sync-daemon.log` | daemon service |
+
+See [Log rotation limitation](#log-rotation-limitation) for caveats about concurrent CLI processes sharing the same log file.
+
 ## Changes from the original project
 
 Git Auto Sync is based on [GitJournal/git-auto-sync](https://github.com/GitJournal/git-auto-sync). The original project's commits up to and including `50cb029` are the baseline; everything since is this project's own work. Notable changes:
@@ -199,6 +229,37 @@ Git Auto Sync is based on [GitJournal/git-auto-sync](https://github.com/GitJourn
 - **Unified configuration** - a `config` CLI and config-file polling reload global and per-repository settings (`syncInterval`, `debounce`, `gitexec`) without restarting the daemon.
 - **Improved ignore rules** - tracked files are always eligible, untracked hidden paths are ignored with explicit exceptions (`.github/`, Git control files, `*.example`), and ignore matching normalizes paths and caches the index per sync round.
 - **Daemon and CLI UX** - `daemon run`, `stop`, `restart`, and `uninstall` commands; per-repository runtime status and last-synced time in `ls` and `status`; structured rotating logs for CLI and daemon; full parent-environment inheritance with secret redaction; and Windows service fixes so LocalSystem shares the user's paths and Git config.
+
+## Bug fixes from the original project
+
+Beyond the improvements listed above, the following defects present in the original `GitJournal/git-auto-sync` baseline (commit `50cb029`) have been fixed:
+
+### Windows service
+
+- **The daemon service failed to start on Windows** - the service executable path was registered without an `.exe` suffix, which Windows does not append when launching services, so the service could not start. The path now carries the platform-correct suffix. (`2f781ef`)
+- **The Windows daemon ran as LocalSystem and lost the user's paths and Git config** - installed services run as `LocalSystem`, whose blank profile left the daemon unable to write logs, resolve repositories, find `git` on `PATH`, read the user's Git identity, or operate the user's worktrees (`dubious-ownership`). The installer now injects the user's `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, and `Path`, and passes `-c safe.directory=<repo>` per repository on Windows. (`6c21dbf`)
+
+### Commits and Git LFS
+
+- **Unchanged Git LFS files were re-committed on every sync, and `check` crashed on empty or root paths** - go-git's status and staging bypass Git's clean/smudge filters, so LFS-tracked files with unchanged pointers read as modified and were committed every cycle; `ShouldIgnoreFile` also panicked on empty or repository-root paths. LFS pointers are now skipped and path validation rejects empty and root paths. (`906d831`)
+- **Nested Git repositories were staged as embedded gitlinks, and linked worktrees were recursed into** - any untracked, non-ignored path was staged through go-git, including nested repositories (committed as mode-`160000` gitlinks) and `git worktree` directories. The commit stage now uses `git status --porcelain` and `git add`, detecting and skipping nested repositories. (`d3c6e0f`)
+
+### Ignore rules
+
+- **Git ignore rules for nested or absolute paths did not apply** - full paths were handed to go-git's ignore matcher as a single component rather than split segments, so most nested ignore patterns silently failed. Paths are now normalized to worktree-relative segments before matching. (`d28c2a7`)
+- **Tracked files could be filtered out, and untracked hidden paths were not ignored despite the README claiming otherwise** - `ShouldIgnoreFile` did not check whether a file was tracked, so real changes to tracked files could be skipped; untracked dot-prefixed paths were not filtered at all. Tracked files now bypass every ignore check, and untracked hidden paths are excluded with explicit exceptions. (`0aa7a3e`)
+
+### Environment and secrets
+
+- **Git subprocesses did not inherit the parent environment, and command errors leaked environment values** - only `repoConfig.Env` plus `HOME` reached Git, so `SSH_AUTH_SOCK`, `PATH`, `XDG_CONFIG_HOME`, and `GIT_*` never did; full `Env` slices were also embedded in command error messages, leaking secrets and agent sockets into logs. Git now inherits the full parent environment with per-repository overrides, and errors expose only variable keys, not values. (`fb3b7ec`)
+
+### Daemon resilience
+
+- **A single repository's sync failure killed the entire daemon** - `AutoSync` failures called `log.Fatalln` in the watcher goroutine, terminating the process and interrupting every other repository, even on transient network errors. Sync failures are now classified by pipeline stage, fetch/push errors retry with capped backoff, and only the affected repository pauses. (`3f7c00b`)
+
+### Notifications
+
+- **The rebase-conflict warning icon failed to load in installed binaries** - the icon was referenced by the relative path `assets/warning.png`, which binaries installed outside the source checkout could not find. The icon is now embedded with `go:embed` and passed to the notifier as PNG bytes. (`699fd7b`)
 
 ## License
 
