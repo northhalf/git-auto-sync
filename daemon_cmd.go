@@ -499,8 +499,12 @@ func reasonForStage(stage string) string {
 		return "commit failed"
 	case "compare":
 		return "upstream comparison failed"
-	case "alert":
-		return "notification failed"
+	case "repo-busy":
+		return "git operation in progress (rebase/merge/...)"
+	case "detached-head":
+		return "HEAD is detached"
+	case "no-upstream":
+		return "branch has no upstream"
 	default:
 		return "unknown error"
 	}

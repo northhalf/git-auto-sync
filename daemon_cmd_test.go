@@ -265,3 +265,32 @@ func Test_PrintReposAlignsColumns(t *testing.T) {
 	assert.Assert(t, !strings.Contains(lines[2], "synced "), "unknown row should omit the synced segment")
 	assert.Assert(t, strings.Contains(lines[2], "unknown (daemon may not be running)"), "unknown row should carry the status label")
 }
+
+// @description    Verifies the paused-stage to reason mapping.
+//
+// Test_ReasonForStage verifies that reasonForStage maps each synchronization stage to its
+// user-facing pause reason, including the repo-state stages, and falls back to "unknown error" for
+// an unrecognized stage.
+//
+// @param           t   "test handle used for table-driven assertions"
+func Test_ReasonForStage(t *testing.T) {
+	tests := []struct {
+		name  string
+		stage string
+		want  string
+	}{
+		{"rebase", "rebase", "rebase conflict"},
+		{"author", "author", "git author not configured"},
+		{"commit", "commit", "commit failed"},
+		{"compare", "compare", "upstream comparison failed"},
+		{"repo-busy", "repo-busy", "git operation in progress (rebase/merge/...)"},
+		{"detached-head", "detached-head", "HEAD is detached"},
+		{"no-upstream", "no-upstream", "branch has no upstream"},
+		{"unknown", "bogus", "unknown error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, reasonForStage(tt.stage), tt.want)
+		})
+	}
+}

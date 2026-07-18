@@ -12,19 +12,31 @@ import (
 
 // @description    Synchronizes a Git repository.
 //
-// AutoSync verifies the Git author, commits eligible worktree changes, and fetches remotes. It then
-// resolves the synchronization state between HEAD and its upstream and acts on it: equal or no
-// upstream skips rebase and push, local-ahead only pushes, upstream-ahead only rebases, and
-// diverged rebases then pushes. A rebase conflict triggers a desktop alert and stops the pipeline
-// before push. Stage functions log their own outcomes, so AutoSync does not duplicate stage errors.
+// AutoSync verifies that the repository is in a syncable state, verifies the Git author, commits
+// eligible worktree changes, and fetches remotes. It then resolves the synchronization state
+// between HEAD and its upstream and acts on it: equal skips rebase and push, local-ahead only
+// pushes, upstream-ahead only rebases, and diverged rebases then pushes. A repo that has an
+// operation in progress, a detached HEAD, or no upstream branch pauses with a desktop alert before
+// any mutation runs. A rebase conflict triggers a desktop alert and stops the pipeline before push.
+// Stage functions log their own outcomes, so AutoSync does not duplicate stage errors.
 //
 // @param           logger      "repository-scoped logger"
 //
 // @param           repoConfig  "configuration for the repository to synchronize"
 //
-// @return          error       "nil on success, or an error from any synchronization stage or alert"
+// @return          error       "nil on success, or an error from any synchronization stage"
 func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	logger.Debug("starting sync")
+
+	if err := checkRepoState(logger, repoConfig); err != nil {
+		if alertErr := beeep.Alert("Git Auto Sync - Paused", "Sync paused for - "+repoConfig.RepoPath+": "+err.Error(), assets.WarningPNG); alertErr != nil {
+			// A failed desktop alert is non-fatal and expected on headless hosts without a
+			// notification daemon; log it but still report the blocking repo state so daemon status
+			// shows the real reason the repository paused.
+			logger.Warn("send repo state alert failed", "error", alertErr)
+		}
+		return tracerr.Wrap(newSyncError(repoStateStage(err), err))
+	}
 
 	if err := ensureGitAuthor(logger, repoConfig); err != nil {
 		return tracerr.Wrap(newSyncError(syncStageAuthor, err))
@@ -55,10 +67,11 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		if err := rebase(logger, repoConfig); err != nil {
 			if errors.Is(err, errRebaseFailed) {
 				repoPath := repoConfig.RepoPath
-				alertErr := beeep.Alert("Git Auto Sync - Conflict", "Could not rebase for - "+repoPath, assets.WarningPNG)
-				if alertErr != nil {
-					logger.Error("send rebase conflict alert failed", "error", alertErr)
-					return tracerr.Wrap(newSyncError(syncStageAlert, alertErr))
+				if alertErr := beeep.Alert("Git Auto Sync - Conflict", "Could not rebase for - "+repoPath, assets.WarningPNG); alertErr != nil {
+					// A failed desktop alert is non-fatal and expected on headless hosts without a
+					// notification daemon; log it but still report the rebase conflict so daemon
+					// status shows the real reason the repository paused.
+					logger.Warn("send rebase conflict alert failed", "error", alertErr)
 				}
 			}
 			return tracerr.Wrap(newSyncError(syncStageRebase, err))

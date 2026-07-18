@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/ztrue/tracerr"
 	"gotest.tools/v3/assert"
 )
@@ -28,7 +27,6 @@ func Test_SyncErrorClassification(t *testing.T) {
 		{stage: "fetch", remote: true},
 		{stage: "compare"},
 		{stage: "rebase"},
-		{stage: "alert"},
 		{stage: "push", remote: true},
 	}
 
@@ -47,22 +45,19 @@ func Test_SyncErrorClassification(t *testing.T) {
 // @description    Verifies author-stage classification from AutoSync.
 //
 // Test_AutoSyncClassifiesAuthorFailure verifies that AutoSync labels a missing Git identity as an
-// author-stage error while preserving the original missing-email error.
+// author-stage error while preserving the original missing-email error. It uses the rebase_nothing
+// fixture, which has a commit and a configured upstream, so the repository passes the repo-state
+// precheck; isolating HOME removes any global Git identity so AutoSync fails at the author stage.
 //
 // @param           t   "test handle used to create the repository and assert the returned error"
 func Test_AutoSyncClassifiesAuthorFailure(t *testing.T) {
-	repoPath := t.TempDir()
-	cmd := exec.Command("git", "init", repoPath)
-	assert.NilError(t, cmd.Run())
+	cfg := PrepareMultiFixtures(t, "rebase_nothing", []string{"rebase_parent"})
 
 	home := t.TempDir()
-	cfg := config.RepoConfig{
-		RepoPath: repoPath,
-		Env: []string{
-			"HOME=" + home,
-			"XDG_CONFIG_HOME=" + home,
-			"GIT_CONFIG_GLOBAL=" + filepath.Join(home, "global.gitconfig"),
-		},
+	cfg.Env = []string{
+		"HOME=" + home,
+		"XDG_CONFIG_HOME=" + home,
+		"GIT_CONFIG_GLOBAL=" + filepath.Join(home, "global.gitconfig"),
 	}
 
 	err := AutoSync(slog.Default(), cfg)
@@ -73,11 +68,16 @@ func Test_AutoSyncClassifiesAuthorFailure(t *testing.T) {
 // @description    Verifies fetch-stage classification from AutoSync.
 //
 // Test_AutoSyncClassifiesFetchFailure verifies that AutoSync labels a failed remote fetch as a
-// retryable fetch-stage error.
+// retryable fetch-stage error. simple_fetch ships without a tracking branch, so the test configures
+// one so the repository passes the repo-state precheck and AutoSync reaches the fetch stage before
+// the rewritten remote URL fails.
 //
 // @param           t   "test handle used to prepare the fixture and assert the returned error"
 func Test_AutoSyncClassifiesFetchFailure(t *testing.T) {
 	cfg := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
+	assert.NilError(t, exec.Command("git", "-C", cfg.RepoPath, "config", "branch.master.remote", "origin1").Run())
+	assert.NilError(t, exec.Command("git", "-C", cfg.RepoPath, "config", "branch.master.merge", "refs/heads/master").Run())
+
 	missingRemote := filepath.Join(t.TempDir(), "missing.git")
 	cmd := exec.Command("git", "-C", cfg.RepoPath, "remote", "set-url", "origin1", missingRemote)
 	assert.NilError(t, cmd.Run())
@@ -85,4 +85,21 @@ func Test_AutoSyncClassifiesFetchFailure(t *testing.T) {
 	err := AutoSync(slog.Default(), cfg)
 	assert.Equal(t, SyncErrorStage(err), syncStageFetch)
 	assert.Assert(t, IsRemoteSyncError(err))
+}
+
+// @description    Verifies a repo-state pause reports its real stage when the alert cannot fire.
+//
+// Test_AutoSync_RepoStatePauseStage verifies that AutoSync returns the specific repo-state stage
+// when checkRepoState blocks the repository, rather than masking it as an alert-stage error. This
+// matters on headless hosts where beeep.Alert cannot deliver a desktop notification: the real
+// reason must still reach state.json so daemon status shows why the repository paused.
+//
+// @param           t   "test handle used to prepare the fixture and assert the returned stage"
+func Test_AutoSync_RepoStatePauseStage(t *testing.T) {
+	// simple_fetch has no tracking branch, so checkRepoState rejects it before any mutation.
+	cfg := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
+
+	err := AutoSync(slog.Default(), cfg)
+	assert.Equal(t, SyncErrorStage(err), "no-upstream")
+	assert.Assert(t, errors.Is(err, errNoUpstream))
 }
