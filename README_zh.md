@@ -214,6 +214,14 @@ Git Auto Sync 将配置和日志存放在平台相关的目录中。
 
 关于多个 CLI 进程共享同一日志文件的注意事项，见[日志轮转限制](#日志轮转限制)。
 
+### Windows 权限
+
+守护进程以 Windows 服务运行，安装在 `LocalSystem` 账户下。管理该服务的子命令 —— `daemon run`、`stop`、`restart` 和 `uninstall` —— 需要访问 Windows 服务控制管理器，因此必须在**管理员**终端中运行；在非管理员终端中执行会提示 `Access is denied`。
+
+使用这些 `daemon` 子命令前，请以管理员身份运行终端。为方便起见，Windows Terminal 可配置为默认以管理员模式打开某个配置文件：打开配置文件下拉菜单，选择**设置**，选中目标配置文件，然后开启**以管理员身份运行此配置文件**：
+
+![Windows Terminal：将配置文件设置为默认以管理员模式运行](assets/windows-terminal-admin.webp)
+
 ## 相比原项目的改进
 
 Git Auto Sync 基于 [GitJournal/git-auto-sync](https://github.com/GitJournal/git-auto-sync)。原项目截至（含）`50cb029` 的提交为基线，此后所有提交均为本项目的工作。主要改进：
@@ -225,7 +233,8 @@ Git Auto Sync 基于 [GitJournal/git-auto-sync](https://github.com/GitJournal/gi
 - **守护进程加固** —— 对文件改动防抖但不延迟计划同步；按仓库隔离失败，对远程错误使用有上限的退避重试；转发 Linux 与 Windows 唤醒事件，使恢复运行的机器立即同步。
 - **统一配置** —— 通过 `config` CLI 与配置文件轮询，在不重启守护进程的情况下重新加载全局与仓库级设置（`syncInterval`、`debounce`、`gitexec`）。
 - **改进的忽略规则** —— 已追踪文件始终符合条件；未追踪的隐藏路径被忽略，但有显式例外（`.github/`、Git 控制文件、`*.example`）；忽略匹配会归一化路径，并按同步轮次缓存索引。
-- **守护进程与 CLI 体验** —— 新增 `daemon run`、`stop`、`restart`、`uninstall` 命令；`ls` 与 `status` 显示按仓库的运行状态和最近同步时间；为 CLI 与守护进程提供结构化轮转日志；继承完整父环境并对密钥脱敏；修复 Windows 服务，使 LocalSystem 共享用户路径与 Git 配置。
+- **守护进程与 CLI 体验** —— 新增 `daemon run`、`stop`、`restart`、`uninstall` 命令；为 CLI 与守护进程提供结构化轮转日志；继承完整父环境并对密钥脱敏；修复 Windows 服务，使 LocalSystem 共享用户路径与 Git 配置。
+- **监控列表可视化** —— 与原项目不同，`daemon ls` 和 `daemon status` 会把每个受监控的仓库渲染为一张对齐的表格：实时显示其运行状态（`running`、`paused (<原因>)` 或 `unknown (daemon may not be running)`）和最近同步时间（`never synced`，或诸如 `synced 3m ago` 的相对时长），表头同时报告守护进程服务状态。哪些仓库健康、已暂停或已过期，一目了然。
 
 ## 原项目缺陷修复
 

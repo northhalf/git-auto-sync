@@ -217,6 +217,14 @@ Per-repository settings are stored in the repository's own Git config under the 
 
 See [Log rotation limitation](#log-rotation-limitation) for caveats about concurrent CLI processes sharing the same log file.
 
+### Windows permissions
+
+The daemon runs as a Windows service installed under the `LocalSystem` account. Subcommands that manage that service - `daemon run`, `stop`, `restart`, and `uninstall` - go through the Windows Service Control Manager and require an **administrator** terminal. In a non-elevated terminal they fail with `Access is denied`.
+
+Open the terminal as administrator before using these `daemon` subcommands. As a convenience, Windows Terminal can launch a profile as administrator by default: open the profile dropdown, choose **Settings**, select the target profile, and turn on **Run this profile as Administrator**:
+
+![Windows Terminal: set a profile to run as administrator by default](assets/windows-terminal-admin.webp)
+
 ## Changes from the original project
 
 Git Auto Sync is based on [GitJournal/git-auto-sync](https://github.com/GitJournal/git-auto-sync). The original project's commits up to and including `50cb029` are the baseline; everything since is this project's own work. Notable changes:
@@ -228,7 +236,8 @@ Git Auto Sync is based on [GitJournal/git-auto-sync](https://github.com/GitJourn
 - **Watcher hardening** - debounces file changes without delaying scheduled syncs, isolates per-repository failures with capped retry backoff for remote errors, and forwards Linux and Windows wake events so a resumed machine syncs immediately.
 - **Unified configuration** - a `config` CLI and config-file polling reload global and per-repository settings (`syncInterval`, `debounce`, `gitexec`) without restarting the daemon.
 - **Improved ignore rules** - tracked files are always eligible, untracked hidden paths are ignored with explicit exceptions (`.github/`, Git control files, `*.example`), and ignore matching normalizes paths and caches the index per sync round.
-- **Daemon and CLI UX** - `daemon run`, `stop`, `restart`, and `uninstall` commands; per-repository runtime status and last-synced time in `ls` and `status`; structured rotating logs for CLI and daemon; full parent-environment inheritance with secret redaction; and Windows service fixes so LocalSystem shares the user's paths and Git config.
+- **Daemon and CLI UX** - `daemon run`, `stop`, `restart`, and `uninstall` commands; structured rotating logs for CLI and daemon; full parent-environment inheritance with secret redaction; and Windows service fixes so LocalSystem shares the user's paths and Git config.
+- **Monitoring list visualization** - unlike the original project, `daemon ls` and `daemon status` render every monitored repository as an aligned table: a live runtime status (`running`, `paused (<reason>)`, or `unknown (daemon may not be running)`) and a last-synced time (`never synced`, or a relative duration such as `synced 3m ago`), beneath a header reporting the daemon service state. Which repositories are healthy, paused, or stale is visible at a glance.
 
 ## Bug fixes from the original project
 
