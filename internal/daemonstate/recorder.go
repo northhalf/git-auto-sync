@@ -6,12 +6,14 @@ import (
 	"time"
 )
 
-// Recorder is the daemon-side writer for state.json. It holds the per-repository status in memory,
-// deduplicates unchanged writes, and serializes persistence so concurrent watcher goroutines can
-// report transitions safely. The CLI reads the file directly; it never touches the Recorder.
+// Recorder is the daemon-side writer for state.json. It holds per-repository status and the active
+// watcher heartbeat set in memory, deduplicates unchanged writes, and serializes persistence so
+// concurrent watcher goroutines can report transitions safely. The CLI reads the file directly; it
+// never touches the Recorder.
 type Recorder struct {
 	mu     sync.Mutex
 	states map[string]RepoStatus
+	active map[string]struct{}
 }
 
 // @description    Creates a daemon state recorder.
@@ -21,7 +23,10 @@ type Recorder struct {
 //
 // @return          *Recorder  "ready-to-use recorder with no repositories"
 func NewRecorder() *Recorder {
-	return &Recorder{states: make(map[string]RepoStatus)}
+	return &Recorder{
+		states: make(map[string]RepoStatus),
+		active: make(map[string]struct{}),
+	}
 }
 
 // @description    Sets a repository's status, persisting only on change.
@@ -44,6 +49,7 @@ func (r *Recorder) Set(repo string, status Status, stage string, lastSynced time
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.active[repo] = struct{}{}
 	existing, ok := r.states[repo]
 	if ok && existing.Status == status && existing.Stage == stage && existing.LastSyncedAt.Equal(lastSynced) {
 		return
@@ -59,31 +65,46 @@ func (r *Recorder) Set(repo string, status Status, stage string, lastSynced time
 	r.persistLocked()
 }
 
-// @description    Refreshes the heartbeat timestamp of every repository.
+// @description    Refreshes the heartbeat timestamp of every active repository.
 //
-// Heartbeat bumps UpdatedAt to the current time for all tracked repositories and persists state.json
-// so the CLI can confirm the daemon is alive. It is a no-op when no repositories are tracked. Write
-// errors are logged and swallowed.
+// Heartbeat bumps UpdatedAt to the current time for repositories whose watchers have reported state
+// and remain active, then persists state.json so the CLI can confirm the watcher is alive. It skips
+// repositories forgotten after an unexpected watcher exit. Write errors are logged and swallowed.
 func (r *Recorder) Heartbeat() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.states) == 0 {
+	if len(r.active) == 0 {
 		return
 	}
 
 	now := time.Now()
-	for repo, s := range r.states {
+	for repo := range r.active {
+		s := r.states[repo]
 		s.UpdatedAt = now
 		r.states[repo] = s
 	}
 	r.persistLocked()
 }
 
+// @description    Forgets a repository's active runtime status without changing persisted state.
+//
+// Forget removes repo from the in-memory heartbeat set after its watcher exits unexpectedly. The
+// state file remains unchanged so a replacement watcher's initial report can recover LastSyncedAt.
+//
+// @param           repo  "repository path whose runtime status should be forgotten"
+func (r *Recorder) Forget(repo string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.active, repo)
+}
+
 // @description    Removes a repository's status entry.
 //
-// Remove deletes the entry for repo and persists state.json. It is a no-op when repo is not tracked,
-// so calling it for an already-removed repository is safe. Write errors are logged and swallowed.
+// Remove deletes the entry for repo and persists state.json. If repo is absent from memory, Remove
+// loads the current state file first so configuration removal also works after a daemon restart or an
+// unexpected watcher exit. Read and write errors are logged and swallowed.
 //
 // @param           repo  "repository path whose status entry should be removed"
 func (r *Recorder) Remove(repo string) {
@@ -91,10 +112,23 @@ func (r *Recorder) Remove(repo string) {
 	defer r.mu.Unlock()
 
 	if _, ok := r.states[repo]; !ok {
-		return
+		disk, err := ReadState()
+		if err != nil {
+			slog.Warn("read daemon state for removal failed", "error", err)
+			return
+		}
+		for _, state := range disk.Repos {
+			if _, exists := r.states[state.Repo]; !exists {
+				r.states[state.Repo] = state
+			}
+		}
+		if _, ok := r.states[repo]; !ok {
+			return
+		}
 	}
 
 	delete(r.states, repo)
+	delete(r.active, repo)
 	r.persistLocked()
 }
 

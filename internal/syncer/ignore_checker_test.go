@@ -135,6 +135,60 @@ func Test_IgnoreChecker_TrackedBypassesAndGitignoreExcludes(t *testing.T) {
 	assert.Equal(t, ignore, true)
 }
 
+// @description    Verifies events through a resolved repository path stay inside the repository.
+//
+// Test_IgnoreChecker_ResolvesRepositorySymlink opens a repository through a directory symlink and
+// checks a Git lock event reported through the symlink target. The event must resolve to
+// .git/index.lock and be ignored rather than rejected as outside the repository.
+//
+// @param           t   "test handle used to create the repository symlink and assert"
+func Test_IgnoreChecker_ResolvesRepositorySymlink(t *testing.T) {
+	root := t.TempDir()
+	repoPath := filepath.Join(root, "repo")
+	assert.NilError(t, os.Mkdir(repoPath, 0o700))
+	_, err := git.PlainInit(repoPath, false)
+	assert.NilError(t, err)
+
+	linkedPath := filepath.Join(root, "linked-repo")
+	if err := os.Symlink(repoPath, linkedPath); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+
+	checker, err := NewIgnoreChecker(linkedPath)
+	assert.NilError(t, err)
+
+	ignore, err := checker.ShouldIgnore(filepath.Join(repoPath, ".git", "index.lock"))
+	assert.NilError(t, err)
+	assert.Equal(t, ignore, true)
+}
+
+// @description    Verifies events reported through a symlink resolve against the real repository.
+//
+// Test_IgnoreChecker_ResolvesEventSymlink opens a repository through its real path and checks a
+// missing Git lock event reported through a directory symlink. Resolving the nearest existing parent
+// must classify the event as .git/index.lock even though the lock file no longer exists.
+//
+// @param           t   "test handle used to create the repository symlink and assert"
+func Test_IgnoreChecker_ResolvesEventSymlink(t *testing.T) {
+	root := t.TempDir()
+	repoPath := filepath.Join(root, "repo")
+	assert.NilError(t, os.Mkdir(repoPath, 0o700))
+	_, err := git.PlainInit(repoPath, false)
+	assert.NilError(t, err)
+
+	linkedPath := filepath.Join(root, "linked-repo")
+	if err := os.Symlink(repoPath, linkedPath); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+
+	checker, err := NewIgnoreChecker(repoPath)
+	assert.NilError(t, err)
+
+	ignore, err := checker.ShouldIgnore(filepath.Join(linkedPath, ".git", "index.lock"))
+	assert.NilError(t, err)
+	assert.Equal(t, ignore, true)
+}
+
 // @description    Verifies NewIgnoreChecker fails on a non-Git directory.
 //
 // Test_IgnoreChecker_NonGitDirectory verifies that constructing a checker for a directory without

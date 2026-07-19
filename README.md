@@ -7,7 +7,7 @@
 
 <h1>Git Auto Sync</h1>
 
-![Status](https://img.shields.io/badge/status-active-brightgreen) ![Stage](https://img.shields.io/badge/stage-stable-firebrick) ![Build Status](https://github.com/northhalf/git-auto-sync/actions/workflows/ci.yml/badge.svg) ![Release](https://img.shields.io/github/v/release/northhalf/git-auto-sync) ![Downloads](https://img.shields.io/github/downloads/northhalf/git-auto-sync/total) ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
+![Status](https://img.shields.io/badge/status-active-brightgreen) ![Stage](https://img.shields.io/badge/stage-beta-blue) ![Build Status](https://github.com/northhalf/git-auto-sync/actions/workflows/ci.yml/badge.svg) ![Release](https://img.shields.io/github/v/release/northhalf/git-auto-sync) ![Downloads](https://img.shields.io/github/downloads/northhalf/git-auto-sync/total) ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 <p align="center">English | <a href="./README_zh.md">中文</a></p>
 
@@ -156,7 +156,8 @@ Git Auto Sync provides two modes:
 
 - **Manual**: `git-auto-sync sync` runs the sync pipeline once.
 - **Daemon**: `git-auto-sync daemon add <repo>` starts a background service that monitors the repository. `daemon run`, `daemon stop`, `daemon restart`, and `daemon uninstall` control the service lifecycle.
-- **Settings**: `git-auto-sync config <key> [value]` gets, sets, or unsets `syncInterval`, `debounce`, and `gitexec` at `--global` (default) or `--local` scope.
+
+Manage `syncInterval`, `debounce`, and `gitexec` separately with `git-auto-sync config <key> [value]` at `--global` (default) or `--local` scope.
 
 Run `git-auto-sync --help` or `git-auto-sync daemon --help` for all commands.
 
@@ -165,7 +166,17 @@ Run `git-auto-sync --help` or `git-auto-sync daemon --help` for all commands.
 Settings live at two scopes: global (in the platform config file, e.g.
 `~/.config/git-auto-sync/config.json` on Linux - see [File locations](#file-locations)) and
 per-repository (in the Git config section `[auto-sync]`). Repository settings override global
-settings, which override defaults. Time units are minutes.
+settings, which override defaults.
+
+The `config` command accepts three settings:
+
+| Key | Meaning | Accepted value | Default | Scope |
+| --- | --- | --- | --- | --- |
+| `syncInterval` | Interval between periodic sync triggers. A periodic trigger starts a sync immediately without waiting for `debounce`. | Positive integer, in minutes | `60` | `--global` or `--local` |
+| `debounce` | Quiet period after the latest eligible filesystem create, write, rename, or remove event before an event-driven sync. Each new eligible event resets the timer; periodic and wake triggers bypass it. | Positive integer, in minutes | `10` | `--global` or `--local` |
+| `gitexec` | Git executable used for Git subprocesses. | Path to an existing Git executable | `git`, resolved through `PATH` | `--global` or `--local` |
+
+`--global` is the default scope. `--local` writes to the current repository, and `--unset` removes the value at the selected scope so resolution falls back to the next level. Repository registration and daemon environment entries use `daemon add`, `daemon rm`, and `daemon env`; they are not `config` keys.
 
 ```bash
 git-auto-sync config syncInterval 60          # minutes, default 60 (global)
@@ -176,11 +187,11 @@ git-auto-sync config --list                   # show effective settings
 git-auto-sync config --unset syncInterval     # remove a setting (default: global)
 ```
 
-Defaults: sync once per hour, ten-minute debounce, `git` resolved through `PATH`.
-
 ### Debounce
 
-The watcher debounces filesystem and wake events using the `debounce` setting (default 10 minutes). Each event resets a timer, and a sync runs only after the configured period elapses with no further events, so a burst of edits coalesces into a single commit rather than one commit per save. Periodic ticks from `syncInterval` and machine-wake events bypass the debounce and trigger a sync immediately, so scheduled and resume syncs are never delayed. Triggers that arrive while a sync is already running are coalesced into one follow-up sync after it finishes.
+The watcher recursively listens for create, write, rename, and remove events on files and directories under the repository. A write event covers file-content modifications. The watcher applies the ignored-file rules before debounce handling, so events from Git metadata, ignored files, empty files, and other excluded paths do not reset the timer.
+
+Each eligible filesystem event resets the `debounce` timer (default 10 minutes). A sync runs only after the configured period elapses with no further eligible events, so a burst of edits coalesces into a single commit rather than one commit per save. Periodic ticks from `syncInterval` and machine-wake events bypass the debounce and trigger a sync immediately, so scheduled and resume syncs are never delayed. Triggers that arrive while a sync is already running are coalesced into one follow-up sync after it finishes.
 
 ### Commit messages
 
@@ -188,8 +199,8 @@ Every commit message is generated from `git status --porcelain`. Each eligible c
 
 ```
 ?? notes/2026-07-18.md
-M src/main.go
-A docs/changelog.md
+ M src/main.go
+ A docs/changelog.md
 ```
 
 There is no human-written summary. This is why the tool suits workflows that prioritize staying in sync over a readable history (see [Use case](#use-case)).
@@ -218,6 +229,12 @@ In addition to the dot-prefix convention, OS-level hidden attributes are honored
 - **macOS** - a file or any ancestor directory carrying the `UF_HIDDEN` file flag (set with `chflags hidden`) is excluded.
 
 A hidden attribute on an ancestor directory excludes every untracked path beneath it. Tracked files still bypass these checks. Linux has no equivalent filesystem attribute, so only the dot-prefix convention applies there; the GTK `.hidden` file convention is not implemented because it is desktop-specific (Nautilus/Nemo only) and name-based rather than a filesystem attribute.
+
+### Symbolic-link paths
+
+You can register a repository through a directory symbolic link, including Termux paths under `~/storage`. Git Auto Sync keeps the configured path in settings and status output, but resolves the repository root for filesystem-event boundary checks. Git Auto Sync treats events reported through either the configured link or its target as paths in the same repository. If a delete or rename event names a path that no longer exists, the checker resolves the nearest existing parent and restores the missing suffix before checking containment.
+
+This normalization applies only to repository-boundary checks. Git Auto Sync does not rewrite `config.json`, traverse targets of symbolic links stored inside the worktree, or change Git's normal symbolic-link behavior. The checker does not guarantee that distinct bind-mount paths, Windows `SUBST` drives, or network-mapped paths identify the same repository.
 
 ### Nested repositories
 

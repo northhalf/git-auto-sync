@@ -64,9 +64,10 @@ func newWatcherManager() *watcherManager {
 // @description    Reconciles running watchers against the configuration.
 //
 // reconcile removes handles for watchers that have exited, then starts a watcher for every
-// repository in repos that is not already running. It is idempotent: an already-running
-// repository is left untouched, and an exited repository is removed before it can be considered
-// for a fresh start, so a repository is never monitored by two watchers at once.
+// repository in repos that is not already running. An unexpected exit forgets only the active
+// heartbeat so a replacement can recover the persisted LastSyncedAt; an exit after configuration
+// removal deletes the repository state. An already-running repository is left untouched, and an
+// exited repository is removed before restart, so two watchers never monitor one repository.
 //
 // @param           repos  "repository paths that should be monitored"
 //
@@ -80,7 +81,11 @@ func (m *watcherManager) reconcile(repos []string, envs []string) {
 		case <-handle.done:
 			delete(m.watchers, repo)
 			if m.recorder != nil {
-				m.recorder.Remove(repo)
+				if slices.Contains(repos, repo) {
+					m.recorder.Forget(repo)
+				} else {
+					m.recorder.Remove(repo)
+				}
 			}
 		default:
 		}

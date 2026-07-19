@@ -3,7 +3,6 @@ package syncer
 import (
 	"errors"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -17,9 +16,10 @@ import (
 // IgnoreChecker opens the repository, reads the Git index, and compiles gitignore patterns once
 // at construction, then performs no further repository IO on subsequent ShouldIgnore calls.
 type IgnoreChecker struct {
-	repoPath string
-	tracked  map[string]struct{}
-	matcher  gitignore.Matcher
+	repoPath         string
+	resolvedRepoPath string
+	tracked          map[string]struct{}
+	matcher          gitignore.Matcher
 }
 
 // @description    Builds an IgnoreChecker from a repository.
@@ -34,6 +34,17 @@ type IgnoreChecker struct {
 //
 // @return          error             "nil on success, or an error opening the repository or reading the index or ignore rules"
 func NewIgnoreChecker(repoPath string) (*IgnoreChecker, error) {
+	repoPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		return nil, tracerr.Wrap(err)
+	}
+	repoPath = filepath.Clean(repoPath)
+
+	resolvedRepoPath, err := filepath.EvalSymlinks(repoPath)
+	if err != nil {
+		return nil, tracerr.Wrap(err)
+	}
+
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		return nil, tracerr.Wrap(err)
@@ -62,9 +73,10 @@ func NewIgnoreChecker(repoPath string) (*IgnoreChecker, error) {
 	matcher := gitignore.NewMatcher(patterns)
 
 	return &IgnoreChecker{
-		repoPath: repoPath,
-		tracked:  tracked,
-		matcher:  matcher,
+		repoPath:         repoPath,
+		resolvedRepoPath: resolvedRepoPath,
+		tracked:          tracked,
+		matcher:          matcher,
 	}, nil
 }
 
@@ -85,15 +97,10 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 		return false, errors.New("file path cannot be empty")
 	}
 
-	if !filepath.IsAbs(filePath) {
-		filePath = path.Join(c.repoPath, filePath)
-	}
-
-	relativePath, err := filepath.Rel(c.repoPath, filePath)
+	repoPath, filePath, relativePath, err := c.resolvePath(filePath)
 	if err != nil {
 		return false, tracerr.Wrap(err)
 	}
-	relativePath = filepath.ToSlash(relativePath)
 
 	if _, ok := c.tracked[relativePath]; ok {
 		return false, nil
@@ -115,7 +122,7 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 	// A Windows-hidden directory or file is an explicit user action, so untracked paths under one
 	// are ignored before the dot-prefix exceptions below can exempt them. Tracked files already
 	// bypassed above remain eligible.
-	if isHiddenByOS(c.repoPath, filePath) {
+	if isHiddenByOS(repoPath, filePath) {
 		return true, nil
 	}
 
@@ -156,6 +163,115 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 	}
 
 	return c.matcher.Match(strings.Split(relativePath, "/"), false), nil
+}
+
+// @description    Resolves a file path against the configured and physical repository roots.
+//
+// resolvePath first accepts paths under the configured repository root, then paths under the root
+// after symbolic links are resolved. If neither matches, it resolves the file path through its
+// nearest existing ancestor so deleted and renamed events can still map through a symbolic link.
+// Paths that remain outside are returned relative to the configured root so ShouldIgnore preserves
+// its existing filtering order before reporting the boundary error.
+//
+// @param           filePath     "absolute or repository-relative path to resolve"
+//
+// @return          matchedRepoPath   string  "repository root matching the resolved file path"
+//
+// @return          resolvedFilePath  string  "absolute file path in the matching root's path space"
+//
+// @return          relativePath      string  "slash-separated repository-relative path"
+//
+// @return          err               error   "path resolution or relative-path error"
+func (c *IgnoreChecker) resolvePath(filePath string) (
+	matchedRepoPath string,
+	resolvedFilePath string,
+	relativePath string,
+	err error,
+) {
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(c.repoPath, filePath)
+	}
+	filePath = filepath.Clean(filePath)
+
+	originalRel, originalInside, originalErr := relativeInsideRepo(c.repoPath, filePath)
+	if originalErr == nil && originalInside {
+		return c.repoPath, filePath, originalRel, nil
+	}
+
+	resolvedRel, resolvedInside, resolvedErr := relativeInsideRepo(c.resolvedRepoPath, filePath)
+	if resolvedErr == nil && resolvedInside {
+		return c.resolvedRepoPath, filePath, resolvedRel, nil
+	}
+
+	resolvedFilePath, err = resolveExistingPath(filePath)
+	if err != nil {
+		return "", "", "", tracerr.Wrap(err)
+	}
+	resolvedRel, resolvedInside, resolvedErr = relativeInsideRepo(c.resolvedRepoPath, resolvedFilePath)
+	if resolvedErr == nil && resolvedInside {
+		return c.resolvedRepoPath, resolvedFilePath, resolvedRel, nil
+	}
+
+	if originalErr != nil {
+		return "", "", "", tracerr.Wrap(originalErr)
+	}
+	return c.repoPath, filePath, originalRel, nil
+}
+
+// @description    Computes a repository-relative path and whether it stays within the root.
+//
+// @param           repoPath  "absolute repository root"
+//
+// @param           filePath  "absolute file path to compare"
+//
+// @return          string    "slash-separated path relative to repoPath"
+//
+// @return          bool      "true when filePath is repoPath or one of its descendants"
+//
+// @return          error     "filepath.Rel error, including incompatible Windows volumes"
+func relativeInsideRepo(repoPath string, filePath string) (string, bool, error) {
+	relativePath, err := filepath.Rel(repoPath, filePath)
+	if err != nil {
+		return "", false, tracerr.Wrap(err)
+	}
+	relativePath = filepath.ToSlash(relativePath)
+	outside := relativePath == ".." || strings.HasPrefix(relativePath, "../")
+	return relativePath, !outside, nil
+}
+
+// @description    Resolves symbolic links while preserving a missing path suffix.
+//
+// resolveExistingPath walks toward the filesystem root until filepath.EvalSymlinks finds an
+// existing ancestor, then appends the removed suffix. This supports file removal and rename events
+// whose reported target no longer exists.
+//
+// @param           filePath  "absolute path to resolve"
+//
+// @return          string    "resolved absolute path with any missing suffix restored"
+//
+// @return          error     "non-absence filesystem error or failure to find an existing ancestor"
+func resolveExistingPath(filePath string) (string, error) {
+	candidate := filePath
+	missingParts := []string{}
+	for {
+		resolved, err := filepath.EvalSymlinks(candidate)
+		if err == nil {
+			for i := len(missingParts) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missingParts[i])
+			}
+			return filepath.Clean(resolved), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", tracerr.Wrap(err)
+		}
+
+		parent := filepath.Dir(candidate)
+		if parent == candidate {
+			return "", tracerr.Wrap(err)
+		}
+		missingParts = append(missingParts, filepath.Base(candidate))
+		candidate = parent
+	}
 }
 
 // @description    Checks whether an existing file is empty.

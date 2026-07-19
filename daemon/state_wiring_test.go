@@ -102,6 +102,70 @@ func Test_ReconcileRemovesStateOnExit(t *testing.T) {
 	assert.Equal(t, len(state.Repos), 0)
 }
 
+// @description    Verifies an unexpected watcher restart preserves its persisted state.
+//
+// Test_ReconcilePreservesStateOnWatcherRestart records a successful sync, lets the watcher exit while
+// the repository remains configured, and reconciles a replacement watcher. The last sync must remain
+// on disk, and Heartbeat must not refresh the forgotten runtime entry before the replacement reports.
+//
+// @param           t  "test handle used for isolated state setup and assertions"
+func Test_ReconcilePreservesStateOnWatcherRestart(t *testing.T) {
+	setupDaemonState(t)
+	fs := newFakeStart()
+	m := &watcherManager{
+		watchers: make(map[string]*watcherHandle),
+		start:    fs.start,
+		recorder: daemonstate.NewRecorder(),
+	}
+	lastSynced := time.Unix(5000, 0)
+	m.recorder.Set("/repo", daemonstate.StatusRunning, "", lastSynced)
+
+	m.reconcile([]string{"/repo"}, nil)
+	fs.close("/repo")
+	m.reconcile([]string{"/repo"}, nil)
+
+	state, err := daemonstate.ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, len(state.Repos), 1)
+	assert.Assert(t, state.Repos[0].LastSyncedAt.Equal(lastSynced))
+	updatedAt := state.Repos[0].UpdatedAt
+	assert.Equal(t, len(fs.started), 2)
+
+	time.Sleep(10 * time.Millisecond)
+	m.Heartbeat()
+	state, err = daemonstate.ReadState()
+	assert.NilError(t, err)
+	assert.Assert(t, state.Repos[0].UpdatedAt.Equal(updatedAt))
+}
+
+// @description    Verifies configuration removal deletes state preserved across a restart.
+//
+// Test_ReconcileRemovesForgottenStateAfterConfigRemoval first restarts an exited watcher while its
+// repository remains configured, which forgets runtime state but preserves the state file. Removing
+// the repository after the replacement exits must still delete the persisted entry.
+//
+// @param           t  "test handle used for isolated state setup and assertions"
+func Test_ReconcileRemovesForgottenStateAfterConfigRemoval(t *testing.T) {
+	setupDaemonState(t)
+	fs := newFakeStart()
+	m := &watcherManager{
+		watchers: make(map[string]*watcherHandle),
+		start:    fs.start,
+		recorder: daemonstate.NewRecorder(),
+	}
+	m.recorder.Set("/repo", daemonstate.StatusRunning, "", time.Unix(5000, 0))
+
+	m.reconcile([]string{"/repo"}, nil)
+	fs.close("/repo")
+	m.reconcile([]string{"/repo"}, nil)
+	fs.close("/repo")
+	m.reconcile(nil, nil)
+
+	state, err := daemonstate.ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, len(state.Repos), 0)
+}
+
 // @description    Verifies Heartbeat is a no-op without a recorder.
 //
 // Test_HeartbeatNoOpWithoutRecorder verifies that Heartbeat on a manager with no recorder does not

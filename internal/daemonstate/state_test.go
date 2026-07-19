@@ -202,6 +202,29 @@ func Test_RecorderRemove(t *testing.T) {
 	assert.Equal(t, len(got.Repos), 1)
 }
 
+// @description    Verifies Recorder.Remove deletes state not loaded into runtime memory.
+//
+// Test_RecorderRemovePersistedOnly seeds state.json before creating the recorder, then removes the
+// repository without any watcher report. The persisted entry must be deleted even though the
+// recorder has no in-memory runtime state for it.
+//
+// @param           t  "test handle used for isolated setup and assertions"
+func Test_RecorderRemovePersistedOnly(t *testing.T) {
+	setupState(t)
+	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+		{Repo: "/repo", Status: StatusRunning, LastSyncedAt: time.Unix(5000, 0)},
+		{Repo: "/other", Status: StatusPaused, Stage: "commit", LastSyncedAt: time.Unix(4000, 0)},
+	}}))
+
+	r := NewRecorder()
+	r.Remove("/repo")
+
+	got, err := ReadState()
+	assert.NilError(t, err)
+	assert.Equal(t, len(got.Repos), 1)
+	assert.Equal(t, got.Repos[0].Repo, "/other")
+}
+
 // @description    Verifies Recorder.Set dedup covers LastSyncedAt.
 //
 // Test_RecorderSetDedupesLastSynced verifies that a Set carrying a new LastSyncedAt writes state.json
