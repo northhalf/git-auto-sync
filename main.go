@@ -206,8 +206,10 @@ func main() {
 	// Sanitize argv before dispatching: affected Termux versions insert the
 	// executable's own path as argv[1] (termux/termux-app#4630), which would
 	// otherwise make urfave/cli report "No help topic for '<path>'" and exit.
-	exe, _ := os.Executable()
-	err := app.Run(sanitizeArgs(os.Args, exe))
+	exe, exeErr := os.Executable()
+	args := sanitizeArgs(os.Args, exe)
+	diagnoseArgv(os.Args, exe, exeErr, args)
+	err := app.Run(args)
 	if err != nil {
 		slog.Error("run failed", "error", err)
 		fmt.Fprintln(os.Stderr, err)
@@ -259,4 +261,43 @@ func sameExecutablePath(a, b string) bool {
 		return false
 	}
 	return ra == rb
+}
+
+// @description    Prints argv diagnostics for Termux issue diagnosis.
+//
+// diagnoseArgv fires when the raw argv[1] is a regular file on disk (typically
+// the duplicated executable path) and prints the raw argv, the os.Executable
+// result and its error, the EvalSymlinks resolution of both argv[1] and the
+// executable path, and the sanitized argv. The output lets the maintainer see
+// exactly why sanitizeArgs did or did not strip argv[1] on the affected device.
+//
+// @param           raw         "original os.Args before sanitization"
+//
+// @param           exe         "os.Executable result, empty when unavailable"
+//
+// @param           exeErr      "error from os.Executable, nil on success"
+//
+// @param           sanitized   "argv after sanitizeArgs"
+func diagnoseArgv(raw []string, exe string, exeErr error, sanitized []string) {
+	if len(raw) < 2 || !isRegularFile(raw[1]) {
+		return
+	}
+	arg1 := raw[1]
+	arg1Resolved, arg1Err := filepath.EvalSymlinks(arg1)
+	exeResolved, exeResolvedErr := filepath.EvalSymlinks(exe)
+	fmt.Fprintln(os.Stderr, "git-auto-sync: argv diagnostic (Termux debug):")
+	fmt.Fprintf(os.Stderr, "  os.Args=%q\n", raw)
+	fmt.Fprintf(os.Stderr, "  argv[1]=%q EvalSymlinks=%q err=%v\n", arg1, arg1Resolved, arg1Err)
+	fmt.Fprintf(os.Stderr, "  os.Executable()=%q err=%v EvalSymlinks=%q err=%v\n", exe, exeErr, exeResolved, exeResolvedErr)
+	fmt.Fprintf(os.Stderr, "  sanitized=%q\n", sanitized)
+}
+
+// @description    Reports whether a path names a regular file.
+//
+// @param           path  "filesystem path to test"
+//
+// @return          bool  "true when the path exists and is a regular file"
+func isRegularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }
