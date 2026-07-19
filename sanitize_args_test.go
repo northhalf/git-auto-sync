@@ -22,81 +22,78 @@ func TestSanitizeArgs(t *testing.T) {
 	if err := os.Symlink(exe, link); err != nil {
 		t.Fatal(err)
 	}
-	other := filepath.Join(tmp, "other")
-	if err := os.WriteFile(other, []byte("x"), 0o644); err != nil {
+	other := filepath.Join(tmp, "other-exe")
+	if err := os.WriteFile(other, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	cases := []struct {
 		name string
 		argv []string
-		exe  string
 		want []string
 	}{
 		{
-			name: "termux duplicate with subcommand stripped",
+			name: "termux absolute argv0 and argv1 same file stripped",
 			argv: []string{exe, exe, "sync"},
-			exe:  exe,
 			want: []string{exe, "sync"},
 		},
 		{
-			name: "termux duplicate without subcommand stripped",
-			argv: []string{exe, exe},
-			exe:  exe,
-			want: []string{exe},
-		},
-		{
-			name: "termux duplicate via symlink stripped",
+			name: "termux symlinked argv1 stripped via SameFile",
 			argv: []string{exe, link, "sync"},
-			exe:  exe,
 			want: []string{exe, "sync"},
+		},
+		{
+			name: "termux PATH bare argv0 with absolute argv1 stripped by basename",
+			argv: []string{"git-auto-sync", exe, "sync"},
+			want: []string{"git-auto-sync", "sync"},
 		},
 		{
 			name: "normal subcommand unchanged",
 			argv: []string{exe, "sync"},
-			exe:  exe,
 			want: []string{exe, "sync"},
 		},
 		{
 			name: "single argv element unchanged",
 			argv: []string{exe},
-			exe:  exe,
 			want: []string{exe},
 		},
 		{
 			name: "version flag unchanged",
 			argv: []string{exe, "--version"},
-			exe:  exe,
 			want: []string{exe, "--version"},
 		},
 		{
-			name: "unrelated existing file unchanged",
+			name: "unrelated executable unchanged",
 			argv: []string{exe, other, "sync"},
-			exe:  exe,
 			want: []string{exe, other, "sync"},
 		},
 		{
 			name: "nonexistent command path unchanged",
 			argv: []string{exe, "sync", "extra"},
-			exe:  exe,
 			want: []string{exe, "sync", "extra"},
-		},
-		{
-			name: "empty exe leaves argv unchanged",
-			argv: []string{exe, exe, "sync"},
-			exe:  "",
-			want: []string{exe, exe, "sync"},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sanitizeArgs(tc.argv, tc.exe)
+			got := sanitizeArgs(tc.argv)
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("sanitizeArgs(%v, %q) = %v, want %v", tc.argv, tc.exe, got, tc.want)
+				t.Errorf("sanitizeArgs(%v) = %v, want %v", tc.argv, got, tc.want)
 			}
 		})
 	}
+
+	// Relative argv0 requires cwd to be the binary's directory so "./git-auto-sync"
+	// resolves to the same file as the absolute argv1 (matches the reporter's case).
+	t.Run("termux relative argv0 absolute argv1 stripped", func(t *testing.T) {
+		t.Chdir(tmp)
+		argv := []string{"./git-auto-sync", exe, "sync"}
+		want := []string{"./git-auto-sync", "sync"}
+		got := sanitizeArgs(argv)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("sanitizeArgs(%v) = %v, want %v", argv, got, want)
+		}
+	})
 }
 
 // @description    Verifies sanitizeArgs restores urfave/cli command dispatch under Termux's duplicated argv.
@@ -123,7 +120,7 @@ func TestSanitizeArgsRestoresCommandDispatch(t *testing.T) {
 	}
 
 	// Simulate Termux's duplicated argv (termux/termux-app#4630): [exe, exe, "sync"].
-	argv := sanitizeArgs([]string{exe, exe, "sync"}, exe)
+	argv := sanitizeArgs([]string{exe, exe, "sync"})
 	if err := app.Run(argv); err != nil {
 		t.Fatalf("app.Run failed: %v (output: %s)", err, buf.String())
 	}

@@ -14,6 +14,35 @@ import (
 	"github.com/ztrue/tracerr"
 )
 
+// @description    Builds the Git subprocess command for the current platform.
+//
+// On Android (Termux), Git ships as a static PIE without a PT_INTERP segment, so the
+// kernel refuses a direct execve (permission denied). termux-exec works around this for
+// shell-launched processes by wrapping the exec through the dynamic linker (linker64);
+// Go binaries built with CGO_ENABLED=0 bypass termux-exec and execve directly, so do the
+// same wrap here: invoke linker64 with the Git path as its program argument. On other
+// platforms, exec Git directly.
+//
+// @param           cmd       "Git executable name or path"
+//
+// @param           gitArgs   "arguments to pass to Git, including the -c globals"
+//
+// @return          *exec.Cmd "configured command ready to run"
+func newGitCmd(cmd string, gitArgs []string) *exec.Cmd {
+	if runtime.GOOS == "android" {
+		if linker, err := os.Executable(); err == nil && filepath.Base(linker) == "linker64" {
+			gitPath := cmd
+			if !filepath.IsAbs(gitPath) {
+				if resolved, err := exec.LookPath(gitPath); err == nil {
+					gitPath = resolved
+				}
+			}
+			return exec.Command(linker, append([]string{gitPath}, gitArgs...)...)
+		}
+	}
+	return exec.Command(cmd, gitArgs...)
+}
+
 // @description    Runs a Git subprocess.
 //
 // gitCommand runs the configured Git executable in the repository directory with the resolved
@@ -59,7 +88,7 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 	}
 	gitArgs = append(gitArgs, args...)
 
-	statusCmd := exec.Command(cmd, gitArgs...)
+	statusCmd := newGitCmd(cmd, gitArgs)
 	statusCmd.Dir = repoConfig.RepoPath
 	statusCmd.Stdout = &outb
 	statusCmd.Stderr = &errb

@@ -206,9 +206,7 @@ func main() {
 	// Sanitize argv before dispatching: affected Termux versions insert the
 	// executable's own path as argv[1] (termux/termux-app#4630), which would
 	// otherwise make urfave/cli report "No help topic for '<path>'" and exit.
-	exe, exeErr := os.Executable()
-	args := sanitizeArgs(os.Args, exe)
-	diagnoseArgv(os.Args, exe, exeErr, args)
+	args := sanitizeArgs(os.Args)
 	err := app.Run(args)
 	if err != nil {
 		slog.Error("run failed", "error", err)
@@ -219,85 +217,77 @@ func main() {
 
 // @description    Drops a Termux-inserted self-path duplicate from argv.
 //
-// On affected Termux versions (termux/termux-app#4630), launching a CGO_ENABLED=0 Go
-// binary inserts the executable's own path as argv[1], shifting the user's real
-// arguments one position later so urfave/cli reports "No help topic for '<path>'".
-// sanitizeArgs removes that leading duplicate when argv[1] resolves to the running
-// executable, leaving argv unchanged otherwise.
+// On affected Termux versions (termux/termux-app#4630), the exec wrapper rewrites
+// execve(prog, [argv0, args...]) to execve(linker64, [prog, argv0, args...]), so
+// Go sees os.Args = [argv0, progAbsolutePath, args...]. urfave/cli then treats
+// the inserted progAbsolutePath as an unknown command and reports "No help topic
+// for '<path>'". os.Executable() returns linker64 (not prog), so sanitizeArgs
+// detects the duplicate by comparing argv[1] against argv[0]: when they name the
+// same file, argv[1] is the inserted duplicate and is removed.
 //
 // @param           argv       "raw command-line arguments, typically os.Args"
 //
-// @param           exe        "running executable path from os.Executable, empty when unavailable"
-//
 // @return          []string   "argv with a leading self-path duplicate removed, or argv unchanged"
-func sanitizeArgs(argv []string, exe string) []string {
-	if len(argv) < 2 || exe == "" {
+func sanitizeArgs(argv []string) []string {
+	if len(argv) < 2 {
 		return argv
 	}
-	if sameExecutablePath(argv[1], exe) {
-		return append(argv[:1], argv[2:]...)
+	if isSelfDuplicate(argv[0], argv[1]) {
+		return append([]string{argv[0]}, argv[2:]...)
 	}
 	return argv
 }
 
-// @description    Reports whether two paths name the same executable file.
+// @description    Reports whether argv[1] is the Termux-inserted executable duplicate.
 //
-// sameExecutablePath compares the paths directly and, when both resolve, after
-// evaluating symbolic links so that a relative or symlinked argv entry still matches
-// the executable's real path. A path that does not exist on disk returns false.
+// isSelfDuplicate returns true when argv[1] names the same file as argv[0]
+// (absolute or relative path invocation), or for PATH invocation where argv[0]
+// is a bare name, when argv[1] is an executable whose basename equals argv[0].
 //
-// @param           a      "first path, typically an argv entry"
+// @param           argv0  "user-typed program name, os.Args[0]"
 //
-// @param           b      "second path, typically the os.Executable result"
+// @param           argv1  "suspect duplicate, os.Args[1]"
+//
+// @return          bool   "true when argv[1] is the inserted executable path"
+func isSelfDuplicate(argv0, argv1 string) bool {
+	if sameExecutablePath(argv0, argv1) {
+		return true
+	}
+	return filepath.Base(argv1) == argv0 && isExecutableFile(argv1)
+}
+
+// @description    Reports whether two paths name the same file.
+//
+// sameExecutablePath compares the paths directly and, when both stat, by inode
+// via os.SameFile so that a relative, symlinked, or Android multi-user aliased
+// path still matches. A path that does not exist returns false.
+//
+// @param           a      "first path"
+//
+// @param           b      "second path"
 //
 // @return          bool   "true when both paths resolve to the same file"
 func sameExecutablePath(a, b string) bool {
 	if a == b {
 		return true
 	}
-	ra, errA := filepath.EvalSymlinks(a)
-	rb, errB := filepath.EvalSymlinks(b)
+	ia, errA := os.Stat(a)
+	ib, errB := os.Stat(b)
 	if errA != nil || errB != nil {
 		return false
 	}
-	return ra == rb
+	return os.SameFile(ia, ib)
 }
 
-// @description    Prints argv diagnostics for Termux issue diagnosis.
-//
-// diagnoseArgv fires when the raw argv[1] is a regular file on disk (typically
-// the duplicated executable path) and prints the raw argv, the os.Executable
-// result and its error, the EvalSymlinks resolution of both argv[1] and the
-// executable path, and the sanitized argv. The output lets the maintainer see
-// exactly why sanitizeArgs did or did not strip argv[1] on the affected device.
-//
-// @param           raw         "original os.Args before sanitization"
-//
-// @param           exe         "os.Executable result, empty when unavailable"
-//
-// @param           exeErr      "error from os.Executable, nil on success"
-//
-// @param           sanitized   "argv after sanitizeArgs"
-func diagnoseArgv(raw []string, exe string, exeErr error, sanitized []string) {
-	if len(raw) < 2 || !isRegularFile(raw[1]) {
-		return
-	}
-	arg1 := raw[1]
-	arg1Resolved, arg1Err := filepath.EvalSymlinks(arg1)
-	exeResolved, exeResolvedErr := filepath.EvalSymlinks(exe)
-	fmt.Fprintln(os.Stderr, "git-auto-sync: argv diagnostic (Termux debug):")
-	fmt.Fprintf(os.Stderr, "  os.Args=%q\n", raw)
-	fmt.Fprintf(os.Stderr, "  argv[1]=%q EvalSymlinks=%q err=%v\n", arg1, arg1Resolved, arg1Err)
-	fmt.Fprintf(os.Stderr, "  os.Executable()=%q err=%v EvalSymlinks=%q err=%v\n", exe, exeErr, exeResolved, exeResolvedErr)
-	fmt.Fprintf(os.Stderr, "  sanitized=%q\n", sanitized)
-}
-
-// @description    Reports whether a path names a regular file.
+// @description    Reports whether a path names an executable regular file.
 //
 // @param           path  "filesystem path to test"
 //
-// @return          bool  "true when the path exists and is a regular file"
-func isRegularFile(path string) bool {
+// @return          bool  "true when the path is a regular file with any execute bit"
+func isExecutableFile(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	return info.Mode().Perm()&0o111 != 0
 }
