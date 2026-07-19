@@ -203,10 +203,60 @@ func main() {
 		},
 	}
 
-	err := app.Run(os.Args)
+	// Sanitize argv before dispatching: affected Termux versions insert the
+	// executable's own path as argv[1] (termux/termux-app#4630), which would
+	// otherwise make urfave/cli report "No help topic for '<path>'" and exit.
+	exe, _ := os.Executable()
+	err := app.Run(sanitizeArgs(os.Args, exe))
 	if err != nil {
 		slog.Error("run failed", "error", err)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// @description    Drops a Termux-inserted self-path duplicate from argv.
+//
+// On affected Termux versions (termux/termux-app#4630), launching a CGO_ENABLED=0 Go
+// binary inserts the executable's own path as argv[1], shifting the user's real
+// arguments one position later so urfave/cli reports "No help topic for '<path>'".
+// sanitizeArgs removes that leading duplicate when argv[1] resolves to the running
+// executable, leaving argv unchanged otherwise.
+//
+// @param           argv       "raw command-line arguments, typically os.Args"
+//
+// @param           exe        "running executable path from os.Executable, empty when unavailable"
+//
+// @return          []string   "argv with a leading self-path duplicate removed, or argv unchanged"
+func sanitizeArgs(argv []string, exe string) []string {
+	if len(argv) < 2 || exe == "" {
+		return argv
+	}
+	if sameExecutablePath(argv[1], exe) {
+		return append(argv[:1], argv[2:]...)
+	}
+	return argv
+}
+
+// @description    Reports whether two paths name the same executable file.
+//
+// sameExecutablePath compares the paths directly and, when both resolve, after
+// evaluating symbolic links so that a relative or symlinked argv entry still matches
+// the executable's real path. A path that does not exist on disk returns false.
+//
+// @param           a      "first path, typically an argv entry"
+//
+// @param           b      "second path, typically the os.Executable result"
+//
+// @return          bool   "true when both paths resolve to the same file"
+func sameExecutablePath(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return ra == rb
 }
