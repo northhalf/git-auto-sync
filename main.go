@@ -50,6 +50,7 @@ func main() {
 				Name:    "watch",
 				Aliases: []string{"monitor", "w", "m"},
 				Usage:   "Monitor a folder for changes",
+				Before:  notificationAvailabilityHook,
 				Action: func(ctx *cli.Context) error {
 					repoPath, err := os.Getwd()
 					if err != nil {
@@ -73,6 +74,7 @@ func main() {
 				Name:    "sync",
 				Aliases: []string{"s"},
 				Usage:   "Sync a repo right now",
+				Before:  notificationAvailabilityHook,
 				Flags: []cli.Flag{
 					&cli.StringSliceFlag{
 						Name:    "env",
@@ -147,6 +149,7 @@ func main() {
 				Name:    "daemon",
 				Aliases: []string{"d"},
 				Usage:   "Interact with the background daemon",
+				Before:  notificationAvailabilityHook,
 				Subcommands: []*cli.Command{
 					{
 						Name:   "status",

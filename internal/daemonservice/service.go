@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/kardianos/service"
@@ -17,8 +15,16 @@ import (
 // present a not-installed service as a normal status rather than a failed query.
 var ErrNotInstalled = errors.New("the service is not installed")
 
+type serviceBackend interface {
+	Status() (service.Status, error)
+	Install() error
+	Uninstall() error
+	Start() error
+	Stop() error
+}
+
 type Service struct {
-	Service service.Service
+	Service serviceBackend
 }
 
 // isNotInstalled reports whether err is the kardianos not-installed error. kardianos signals a
@@ -39,52 +45,11 @@ func isNotInstalled(err error) bool {
 //
 // @return          error    "nil on success, or an error resolving the executable or creating the service"
 func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
-	options := make(service.KeyValue)
-	options["Restart"] = "on-success"
-	options["UserService"] = true
-	options["RunAtLoad"] = true
-
-	ex, err := os.Executable()
+	backend, err := newServiceBackend(daemon)
 	if err != nil {
 		return Service{}, tracerr.Wrap(err)
 	}
-	exDirPath := filepath.Dir(ex)
-	executablePath := filepath.Join(exDirPath, "git-auto-sync-daemon")
-	if runtime.GOOS == "windows" {
-		// Windows services require the .exe suffix in ImagePath; CreateProcess does not append it.
-		executablePath += ".exe"
-	}
-
-	deps := []string{}
-	if runtime.GOOS == "linux" {
-		deps = []string{"After=network-online.target syslog.target"}
-	}
-
-	svcConfig := &service.Config{
-		Name:        "git-auto-sync-daemon",
-		DisplayName: "Git Auto Sync Daemon",
-		Description: "Background Process for Auto Syncing Git Repos",
-
-		Executable:   executablePath,
-		Dependencies: deps,
-		Option:       options,
-	}
-
-	if runtime.GOOS == "windows" {
-		// kardianos ignores UserService on Windows, so the service installs as LocalSystem. The
-		// daemon then resolves %APPDATA%/%LOCALAPPDATA% against the system profile instead of the
-		// installing user's, reading an empty config and writing state and logs where the CLI never
-		// looks. Inject the CLI process's values via the service Environment registry value so the
-		// daemon shares the user's config, state, and log paths.
-		svcConfig.EnvVars = windowsUserEnvVars()
-	}
-
-	s, err := service.New(daemon, svcConfig)
-	if err != nil {
-		return Service{}, tracerr.Wrap(err)
-	}
-
-	return Service{Service: s}, nil
+	return Service{Service: backend}, nil
 }
 
 // @description    Collects the Windows user profile environment for the service process.

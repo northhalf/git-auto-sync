@@ -120,6 +120,36 @@ git-auto-sync daemon status
 
 守护进程会监听文件系统、按配置的间隔轮询，并自动同步。
 
+### Android / Termux
+
+请下载 `Android_arm64` release 归档，不要在 Termux 中使用 `Linux_arm64`。Android 的系统调用策略与普通 Linux 不同，Linux Go 二进制在查找可执行文件时可能因 `SIGSYS` 直接退出。
+
+按需安装运行依赖：
+
+```bash
+pkg install git
+
+# 仅 daemon 命令需要。
+pkg install termux-services
+
+# 可选：启用 Android 系统通知。
+pkg install termux-api
+```
+
+安装 `termux-services` 后，重启 Termux，或执行：
+
+```bash
+source "$PREFIX/etc/profile.d/start-services.sh"
+```
+
+`daemon run` 和 `daemon add` 通过 runit 创建并管理 `$PREFIX/var/service/git-auto-sync-daemon`。`daemon uninstall` 只删除由本程序管理的服务定义，保留应用配置、仓库注册列表、运行状态和日志。程序不会覆盖或删除并非由 Git Auto Sync 创建的同名服务目录。
+
+设置了 `XDG_CONFIG_HOME` 时，全局设置文件位于 `$XDG_CONFIG_HOME/git-auto-sync/config.json`。否则位于 `$HOME/.config/git-auto-sync/config.json`；Termux 的常见完整路径是 `/data/data/com.termux/files/home/.config/git-auto-sync/config.json`。`git-auto-sync config --global ...` 命令会读写该文件。
+
+Android 通知还要求安装与 Termux 来源一致的 Termux:API Android 应用。如果找不到 `termux-notification`，`sync`、`watch` 和 daemon 命令会显示警告，但继续正常运行。Android 没有 systemd-logind 唤醒源，因此唤醒通知明确禁用；文件系统事件和配置的 `syncInterval` 仍会触发同步。
+
+Android 12 及更高版本可能终止 Termux 后台进程。将 Termux 排除在电池优化之外可提高可靠性。`termux-wake-lock` 为可选措施，并会增加耗电。
+
 ## 使用说明
 
 Git Auto Sync 提供两种工作模式：
@@ -209,6 +239,7 @@ Git Auto Sync 将配置和日志存放在平台相关的目录中。
 | 平台 | 路径 |
 | --- | --- |
 | Linux | `~/.config/git-auto-sync/config.json` |
+| Android / Termux | 设置了 `XDG_CONFIG_HOME` 时为 `$XDG_CONFIG_HOME/git-auto-sync/config.json`；否则为 `~/.config/git-auto-sync/config.json` |
 | macOS | `~/Library/Application Support/git-auto-sync/config.json` |
 | Windows | `%AppData%\git-auto-sync\config.json` |
 
@@ -219,6 +250,7 @@ Git Auto Sync 将配置和日志存放在平台相关的目录中。
 | 平台 | 目录 |
 | --- | --- |
 | Linux | `~/.local/share/git-auto-sync/log/` |
+| Android / Termux | `~/.local/share/git-auto-sync/log/` |
 | macOS | `~/Library/Logs/` |
 | Windows | `%LOCALAPPDATA%\git-auto-sync\logs\` |
 
@@ -250,6 +282,7 @@ Git Auto Sync 基于 [GitJournal/git-auto-sync](https://github.com/GitJournal/gi
 - **改进的忽略规则** —— 已追踪文件始终符合条件；未追踪的隐藏路径被忽略，但有显式例外（`.github/`、Git 控制文件、`*.example`）；忽略匹配会归一化路径，并按同步轮次缓存索引。
 - **守护进程与 CLI 体验** —— 新增 `daemon run`、`stop`、`restart`、`uninstall` 命令；为 CLI 与守护进程提供结构化轮转日志；继承完整父环境并对密钥脱敏；修复 Windows 服务，使 LocalSystem 共享用户路径与 Git 配置。
 - **监控列表可视化** —— 与原项目不同，`daemon ls` 和 `daemon status` 会把每个受监控的仓库渲染为一张对齐的表格：实时显示其运行状态（`running`、`paused (<原因>)` 或 `unknown (daemon may not be running)`）和最近同步时间（`never synced`，或诸如 `synced 3m ago` 的相对时长），表头同时报告守护进程服务状态。哪些仓库健康、已暂停或已过期，一目了然。
+- **Android / Termux 支持** —— 专用 Android ARM64 release 避免 Linux 系统调用不兼容；daemon 通过 `termux-services` 交给 runit 管理；Android 通知使用 `termux-notification`；可选通知依赖缺失时降级为警告。
 
 ## 原项目缺陷修复
 

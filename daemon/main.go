@@ -2,13 +2,10 @@ package main
 
 import (
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/kardianos/service"
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/northhalf/git-auto-sync/internal/daemonservice"
-	"github.com/northhalf/git-auto-sync/internal/logging"
 )
 
 type Daemon struct{}
@@ -88,32 +85,4 @@ func (d *Daemon) run() {
 func (d *Daemon) Stop(s service.Service) error {
 	// Stop should not block. Return with a few seconds.
 	return nil
-}
-
-// @description    Runs the daemon service.
-//
-// main constructs the daemon service, obtains its logger, and runs the service. It terminates on
-// setup errors and logs a service run error.
-func main() {
-	_, _ = logging.SetupDaemonLogger(os.Getenv("DEBUG") == "true")
-	slog.Info("Start git-auto-sync daemon")
-
-	daemon := Daemon{}
-	autoSyncService, err := daemonservice.NewServiceWithDaemon(&daemon)
-	if err != nil {
-		slog.Error("build service failed", "error", err)
-		os.Exit(1)
-	}
-
-	s := autoSyncService.Service
-	logger, err := s.Logger(nil)
-	if err != nil {
-		slog.Error("build service logger failed", "error", err)
-		os.Exit(1)
-	}
-
-	err = s.Run()
-	if err != nil {
-		_ = logger.Error("RunService", err)
-	}
 }

@@ -1,12 +1,15 @@
 package syncer
 
 import (
+	"bytes"
 	"errors"
 	"log/slog"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/northhalf/git-auto-sync/internal/notification"
 	"github.com/ztrue/tracerr"
 	"gotest.tools/v3/assert"
 )
@@ -102,4 +105,22 @@ func Test_AutoSync_RepoStatePauseStage(t *testing.T) {
 	err := AutoSync(slog.Default(), cfg)
 	assert.Equal(t, SyncErrorStage(err), "no-upstream")
 	assert.Assert(t, errors.Is(err, errNoUpstream))
+}
+
+// @description    Verifies an already-reported unavailable notifier does not add duplicate sync warnings.
+//
+// @param           t  "test handle used to prepare a paused repository and inspect logs"
+func Test_AutoSyncUnavailableAlertDoesNotRepeatWarning(t *testing.T) {
+	previous := sendAlert
+	sendAlert = func(string, string) error { return notification.ErrUnavailable }
+	t.Cleanup(func() { sendAlert = previous })
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	cfg := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
+
+	err := AutoSync(logger, cfg)
+	assert.Equal(t, SyncErrorStage(err), "no-upstream")
+	assert.Assert(t, errors.Is(err, errNoUpstream))
+	assert.Assert(t, !strings.Contains(logs.String(), "send repo state alert failed"), logs.String())
 }

@@ -120,6 +120,36 @@ git-auto-sync daemon status
 
 The daemon watches the filesystem, polls every configured interval, and syncs automatically.
 
+### Android / Termux
+
+Download the `Android_arm64` release archive. Do not use the `Linux_arm64` archive in Termux: Android applies a different syscall policy, and ordinary Linux Go binaries can terminate with `SIGSYS` while looking up executables.
+
+Install the runtime dependencies you need:
+
+```bash
+pkg install git
+
+# Required only for daemon commands.
+pkg install termux-services
+
+# Optional: enables Android system notifications.
+pkg install termux-api
+```
+
+After installing `termux-services`, restart Termux or run:
+
+```bash
+source "$PREFIX/etc/profile.d/start-services.sh"
+```
+
+`daemon run` and `daemon add` create and manage `$PREFIX/var/service/git-auto-sync-daemon` through runit. `daemon uninstall` removes only that managed service definition; application configuration, repository registrations, state, and logs are preserved. An existing service directory not created by Git Auto Sync is never overwritten or removed.
+
+Global settings are stored at `$XDG_CONFIG_HOME/git-auto-sync/config.json` when `XDG_CONFIG_HOME` is set. Otherwise, the path is `$HOME/.config/git-auto-sync/config.json`, normally `/data/data/com.termux/files/home/.config/git-auto-sync/config.json` in Termux. The `git-auto-sync config --global ...` commands read and write this file.
+
+Android notifications also require the Termux:API Android app from the same distribution source as Termux. If `termux-notification` is missing, `sync`, `watch`, and daemon commands print a warning but continue normally. Android has no systemd-logind wake source, so wake notifications are disabled; filesystem events and the configured `syncInterval` continue to trigger synchronization.
+
+Android 12 and newer may terminate Termux background processes. Exempting Termux from battery optimization can improve reliability. `termux-wake-lock` is optional and increases power use.
+
 ## Usage
 
 Git Auto Sync provides two modes:
@@ -212,6 +242,7 @@ Git Auto Sync stores configuration and logs in platform-specific directories.
 | Platform | Path |
 | --- | --- |
 | Linux | `~/.config/git-auto-sync/config.json` |
+| Android / Termux | `$XDG_CONFIG_HOME/git-auto-sync/config.json` if set; otherwise `~/.config/git-auto-sync/config.json` |
 | macOS | `~/Library/Application Support/git-auto-sync/config.json` |
 | Windows | `%AppData%\git-auto-sync\config.json` |
 
@@ -222,6 +253,7 @@ Per-repository settings are stored in the repository's own Git config under the 
 | Platform | Directory |
 | --- | --- |
 | Linux | `~/.local/share/git-auto-sync/log/` |
+| Android / Termux | `~/.local/share/git-auto-sync/log/` |
 | macOS | `~/Library/Logs/` |
 | Windows | `%LOCALAPPDATA%\git-auto-sync\logs\` |
 
@@ -253,6 +285,7 @@ Git Auto Sync is based on [GitJournal/git-auto-sync](https://github.com/GitJourn
 - **Improved ignore rules** - tracked files are always eligible, untracked hidden paths are ignored with explicit exceptions (`.github/`, Git control files, `*.example`), and ignore matching normalizes paths and caches the index per sync round.
 - **Daemon and CLI UX** - `daemon run`, `stop`, `restart`, and `uninstall` commands; structured rotating logs for CLI and daemon; full parent-environment inheritance with secret redaction; and Windows service fixes so LocalSystem shares the user's paths and Git config.
 - **Monitoring list visualization** - unlike the original project, `daemon ls` and `daemon status` render every monitored repository as an aligned table: a live runtime status (`running`, `paused (<reason>)`, or `unknown (daemon may not be running)`) and a last-synced time (`never synced`, or a relative duration such as `synced 3m ago`), beneath a header reporting the daemon service state. Which repositories are healthy, paused, or stale is visible at a glance.
+- **Android / Termux support** - dedicated Android ARM64 releases avoid Linux syscall incompatibilities, runit manages the daemon through `termux-services`, Android notifications use `termux-notification`, and unavailable optional notification support degrades to a warning.
 
 ## Bug fixes from the original project
 
