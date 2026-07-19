@@ -13,7 +13,7 @@
 
 <h5>一个自动提交并同步 Git 仓库的轻量级命令行工具。</h5>
 
-Git Auto Sync 是 <a href="https://github.com/GitJournal/git-auto-sync"><b>GitJournal/git-auto-sync</b></a> 的修改版本，主要修复原项目的 bug 并完善功能。
+可在 Linux、macOS、Windows 和 Android（Termux）上运行。
 
 </div>
 

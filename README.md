@@ -13,7 +13,7 @@
 
 <h5>A lightweight command-line tool to automatically commit and sync Git repositories.</h5>
 
-Git Auto Sync is a modified version of <a href="https://github.com/GitJournal/git-auto-sync"><b>GitJournal/git-auto-sync</b></a>, focused on fixing bugs and improving functionality.
+Runs on Linux, macOS, Windows, and Android (Termux).
 
 </div>
 
