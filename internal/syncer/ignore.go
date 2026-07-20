@@ -1,8 +1,6 @@
 package syncer
 
-import (
-	"github.com/ztrue/tracerr"
-)
+import ()
 
 // @description    Determines whether a file should be ignored.
 //
@@ -21,7 +19,7 @@ import (
 func ShouldIgnoreFile(repoPath string, filePath string) (bool, error) {
 	checker, err := NewIgnoreChecker(repoPath)
 	if err != nil {
-		return false, tracerr.Wrap(err)
+		return false, err
 	}
 	return checker.ShouldIgnore(filePath)
 }

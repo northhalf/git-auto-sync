@@ -10,7 +10,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 var errNoGitAuthorEmail = errors.New("missing git author email")
@@ -41,7 +40,7 @@ func ensureGitAuthor(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	repo, err := git.PlainOpenWithOptions(repoConfig.RepoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		logger.Error("git author verification failed", "operation", "open repository", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	envMap := envMapFromSlice(repoConfig.Env)
@@ -63,7 +62,7 @@ func ensureGitAuthor(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	cfg, err := repo.ConfigScoped(gitconfig.SystemScope)
 	if err != nil {
 		logger.Error("git author verification failed", "operation", "read config", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if cfg.User.Email == "" {

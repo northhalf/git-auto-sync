@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/rjeczalik/notify"
-	"github.com/ztrue/tracerr"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/syncer"
@@ -49,7 +48,7 @@ func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoCo
 	notifyChannel := make(chan notify.EventInfo, 100)
 	if err := notify.Watch(filepath.Join(cfg.RepoPath, "..."), notifyChannel, notify.Write, notify.Rename, notify.Remove, notify.Create); err != nil {
 		logger.Error("watcher failed", "operation", "watch filesystem", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 	defer notify.Stop(notifyChannel)
 
@@ -57,11 +56,11 @@ func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoCo
 	notifier, err := NewAwakeNotifier(logger)
 	if err != nil {
 		logger.Error("watcher failed", "operation", "create awake notifier", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 	if err := notifier.Start(ctx, awakeChannel); err != nil {
 		logger.Error("watcher failed", "operation", "start awake notifier", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	syncTicker := time.NewTicker(cfg.SyncInterval)
@@ -82,7 +81,7 @@ func WatchForChanges(ctx context.Context, logger *slog.Logger, cfg config.RepoCo
 
 	logger.Info("watcher started")
 	if err := runWatchLoop(ctx, logger, cfg.Debounce, notifyChannel, awakeChannel, syncTicker.C, deps); err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	return nil
 }

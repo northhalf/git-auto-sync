@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/northhalf/git-auto-sync/internal/notification"
-	"github.com/ztrue/tracerr"
 	"gotest.tools/v3/assert"
 )
 
@@ -36,7 +35,7 @@ func Test_SyncErrorClassification(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.stage, func(t *testing.T) {
 			cause := errors.New("stage failed")
-			err := tracerr.Wrap(newSyncError(tt.stage, cause))
+			err := newSyncError(tt.stage, cause)
 
 			assert.Equal(t, SyncErrorStage(err), tt.stage)
 			assert.Equal(t, IsRemoteSyncError(err), tt.remote)

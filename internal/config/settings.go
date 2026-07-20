@@ -2,13 +2,13 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/ztrue/tracerr"
 )
 
 // Default synchronization and debounce intervals and the default Git executable. Repository-local
@@ -44,7 +44,7 @@ type Settings struct {
 func settingsFile() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", tracerr.Wrap(err)
+		return "", err
 	}
 
 	return filepath.Join(configDir, "git-auto-sync", "config.json"), nil
@@ -62,7 +62,7 @@ func settingsFile() (string, error) {
 func GlobalSettingsModTime() (time.Time, error) {
 	configFile, err := settingsFile()
 	if err != nil {
-		return time.Time{}, tracerr.Wrap(err)
+		return time.Time{}, err
 	}
 
 	info, err := os.Stat(configFile)
@@ -70,7 +70,7 @@ func GlobalSettingsModTime() (time.Time, error) {
 		if os.IsNotExist(err) {
 			return time.Time{}, nil
 		}
-		return time.Time{}, tracerr.Wrap(err)
+		return time.Time{}, err
 	}
 
 	return info.ModTime(), nil
@@ -88,11 +88,11 @@ func GlobalSettingsModTime() (time.Time, error) {
 func ReadGlobalSettings() (_ *Settings, err error) {
 	configFile, err := settingsFile()
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	if mkErr := os.MkdirAll(filepath.Dir(configFile), 0o700); mkErr != nil {
-		return nil, tracerr.Wrap(mkErr)
+		return nil, mkErr
 	}
 
 	settings := Settings{}
@@ -102,19 +102,19 @@ func ReadGlobalSettings() (_ *Settings, err error) {
 	} else {
 		fh, err := os.Open(configFile)
 		if err != nil {
-			return nil, tracerr.Wrap(err)
+			return nil, err
 		}
 		defer func() {
 			closeErr := fh.Close()
 			if err == nil && closeErr != nil {
-				err = tracerr.Wrap(closeErr)
+				err = closeErr
 			}
 		}()
 
 		decoder := json.NewDecoder(fh)
 		err = decoder.Decode(&settings)
 		if err != nil {
-			return nil, tracerr.Wrap(err)
+			return nil, err
 		}
 	}
 
@@ -133,28 +133,28 @@ func ReadGlobalSettings() (_ *Settings, err error) {
 func WriteGlobalSettings(settings *Settings) (err error) {
 	configFile, err := settingsFile()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if mkErr := os.MkdirAll(filepath.Dir(configFile), 0o700); mkErr != nil {
-		return tracerr.Wrap(mkErr)
+		return mkErr
 	}
 
 	fh, err := os.Create(configFile)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	defer func() {
 		closeErr := fh.Close()
 		if err == nil && closeErr != nil {
-			err = tracerr.Wrap(closeErr)
+			err = closeErr
 		}
 	}()
 
 	encoder := json.NewEncoder(fh)
 	err = encoder.Encode(settings)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	return nil
@@ -178,7 +178,7 @@ var SettingKeys = map[string]SettingField{
 		Decode: func(s *Settings, v string) error {
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				return tracerr.Wrap(err)
+				return err
 			}
 			s.SyncInterval = &n
 			return nil
@@ -195,7 +195,7 @@ var SettingKeys = map[string]SettingField{
 		Decode: func(s *Settings, v string) error {
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				return tracerr.Wrap(err)
+				return err
 			}
 			s.Debounce = &n
 			return nil
@@ -237,12 +237,12 @@ var SettingKeys = map[string]SettingField{
 func ReadLocalSettings(repoPath string) (*Settings, error) {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	cfg, err := repo.Config()
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	section := cfg.Raw.Section("auto-sync")
@@ -253,7 +253,7 @@ func ReadLocalSettings(repoPath string) (*Settings, error) {
 			continue
 		}
 		if err := field.Decode(settings, value); err != nil {
-			return nil, tracerr.Wrap(err)
+			return nil, err
 		}
 	}
 	return settings, nil
@@ -273,17 +273,17 @@ func ReadLocalSettings(repoPath string) (*Settings, error) {
 // @return          error     "nil on success, or an error opening, updating, or persisting the config"
 func SetLocalSetting(repoPath, key, value string) error {
 	if _, ok := SettingKeys[key]; !ok {
-		return tracerr.Errorf("unknown auto-sync key: %s", key)
+		return fmt.Errorf("unknown auto-sync key: %s", key)
 	}
 
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	cfg, err := repo.Config()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	cfg.Raw.Section("auto-sync").SetOption(key, value)
@@ -302,17 +302,17 @@ func SetLocalSetting(repoPath, key, value string) error {
 // @return          error     "nil on success, or an error opening, updating, or persisting the config"
 func UnsetLocalSetting(repoPath, key string) error {
 	if _, ok := SettingKeys[key]; !ok {
-		return tracerr.Errorf("unknown auto-sync key: %s", key)
+		return fmt.Errorf("unknown auto-sync key: %s", key)
 	}
 
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	cfg, err := repo.Config()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	cfg.Raw.Section("auto-sync").RemoveOption(key)

@@ -9,7 +9,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 var (
@@ -85,13 +84,13 @@ func checkRepoState(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	repo, err := git.PlainOpenWithOptions(repoConfig.RepoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		logger.Error("repo state check failed", "operation", "open repository", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	ref, err := repo.Reference(plumbing.HEAD, false)
 	if err != nil {
 		logger.Error("repo state check failed", "operation", "read HEAD", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if ref.Type() == plumbing.HashReference {
@@ -103,7 +102,7 @@ func checkRepoState(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	cfg, err := repo.Config()
 	if err != nil {
 		logger.Error("repo state check failed", "operation", "read config", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	branchCfg := cfg.Branches[branchName]

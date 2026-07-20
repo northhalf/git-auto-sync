@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
-	"github.com/ztrue/tracerr"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/daemonstate"
@@ -58,17 +57,17 @@ func main() {
 				Action: func(ctx *cli.Context) error {
 					repoPath, err := os.Getwd()
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					repoPath, err = isValidGitRepo(repoPath)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					cfg, err := config.NewRepoConfig(repoPath)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					return watcher.WatchForChanges(context.Background(), logging.WithRepo(repoPath), cfg, nil)
@@ -92,24 +91,24 @@ func main() {
 				Action: func(ctx *cli.Context) error {
 					repoPath, err := os.Getwd()
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					repoPath, err = isValidGitRepo(repoPath)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					cfg, err := config.NewRepoConfig(repoPath)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					cfg.Env = append(cfg.Env, ctx.StringSlice("env")...)
 
 					err = syncer.AutoSync(logging.WithRepo(repoPath), cfg)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					if recordErr := daemonstate.RecordSyncSuccess(repoPath); recordErr != nil {
@@ -125,12 +124,12 @@ func main() {
 				Action: func(ctx *cli.Context) error {
 					repoPath, err := os.Getwd()
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					repoPath, err = isValidGitRepo(repoPath)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					path := ctx.Args().First()
@@ -139,12 +138,12 @@ func main() {
 					}
 					path, err = filepath.Abs(path)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 
 					ignored, err := syncer.ShouldIgnoreFile(repoPath, path)
 					if err != nil {
-						return tracerr.Wrap(err)
+						return err
 					}
 					fmt.Println("Ignored:", ignored)
 

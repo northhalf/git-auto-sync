@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 // @description    Fetches the current branch's configured upstream branch.
@@ -26,7 +25,7 @@ func fetch(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	bi, err := fetchBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		logger.Error("fetch failed", "operation", "read branch information", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
@@ -41,7 +40,7 @@ func fetch(logger *slog.Logger, repoConfig config.RepoConfig) error {
 
 	if _, err := gitCommand(logger, repoConfig, []string{"fetch", bi.UpstreamRemote, bi.UpstreamBranch}); err != nil {
 		logger.Error("fetch failed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch, "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	logger.Info("fetch completed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch)

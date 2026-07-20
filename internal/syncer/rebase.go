@@ -8,7 +8,6 @@ import (
 	"path"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 var errRebaseFailed = errors.New("git rebase failed")
@@ -31,7 +30,7 @@ func rebase(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	bi, err := fetchBranchInfo(repoPath)
 	if err != nil {
 		logger.Error("rebase failed", "operation", "read branch information", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
@@ -44,20 +43,20 @@ func rebase(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		rebaseInProgress, err := isRebasing(repoPath)
 		if err != nil {
 			logger.Error("rebase failed", "operation", "inspect rebase state", "error", err)
-			return tracerr.Wrap(err)
+			return err
 		}
 
 		var exerr *exec.ExitError
 		if errors.As(rebaseErr, &exerr) && exerr.ExitCode() == 1 && rebaseInProgress {
 			if _, err := gitCommand(logger, repoConfig, []string{"rebase", "--abort"}); err != nil {
 				logger.Error("rebase failed", "operation", "abort rebase", "error", err)
-				return tracerr.Wrap(err)
+				return err
 			}
 			logger.Error("rebase failed", "error", errRebaseFailed)
 			return errRebaseFailed
 		}
 		logger.Error("rebase failed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch, "error", rebaseErr)
-		return tracerr.Wrap(rebaseErr)
+		return rebaseErr
 	}
 
 	logger.Info("rebase completed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch)
@@ -95,12 +94,12 @@ func pathExists(name string) (bool, error) {
 func isRebasing(repoPath string) (bool, error) {
 	ra, err := pathExists(path.Join(repoPath, ".git", "rebase-apply"))
 	if err != nil {
-		return false, tracerr.Wrap(err)
+		return false, err
 	}
 
 	rm, err := pathExists(path.Join(repoPath, ".git", "rebase-merge"))
 	if err != nil {
-		return false, tracerr.Wrap(err)
+		return false, err
 	}
 
 	return ra || rm, nil

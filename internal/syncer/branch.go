@@ -3,7 +3,6 @@ package syncer
 import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/ztrue/tracerr"
 )
 
 type branchInfo struct {
@@ -25,17 +24,17 @@ type branchInfo struct {
 func fetchBranchInfo(repoPath string) (branchInfo, error) {
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
-		return branchInfo{}, tracerr.Wrap(err)
+		return branchInfo{}, err
 	}
 
 	config, err := repo.Config()
 	if err != nil {
-		return branchInfo{}, tracerr.Wrap(err)
+		return branchInfo{}, err
 	}
 
 	ref, err := repo.Reference(plumbing.HEAD, false)
 	if err != nil {
-		return branchInfo{}, tracerr.Wrap(err)
+		return branchInfo{}, err
 	}
 
 	currentBranchName := ref.Target().Short()

@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
-
-	"github.com/ztrue/tracerr"
 )
 
 // StaleThreshold is the maximum age at which a status entry is considered fresh. It exceeds the
@@ -66,7 +64,7 @@ type State struct {
 func StateFile() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", tracerr.Wrap(err)
+		return "", err
 	}
 
 	return filepath.Join(configDir, "git-auto-sync", "state.json"), nil
@@ -83,7 +81,7 @@ func StateFile() (string, error) {
 func ReadState() (*State, error) {
 	stateFile, err := StateFile()
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	state := &State{}
@@ -93,14 +91,14 @@ func ReadState() (*State, error) {
 		if os.IsNotExist(err) {
 			return state, nil
 		}
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 	defer func() {
 		_ = fh.Close()
 	}()
 
 	if err := json.NewDecoder(fh).Decode(state); err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	return state, nil
@@ -118,12 +116,12 @@ func ReadState() (*State, error) {
 func WriteState(state *State) error {
 	stateFile, err := StateFile()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	dir := filepath.Dir(stateFile)
 	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
-		return tracerr.Wrap(mkErr)
+		return mkErr
 	}
 
 	sorted := append([]RepoStatus(nil), state.Repos...)
@@ -131,12 +129,12 @@ func WriteState(state *State) error {
 
 	data, err := json.MarshalIndent(&State{Repos: sorted}, "", "  ")
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	tmp, err := os.CreateTemp(dir, ".state-*.tmp")
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
@@ -144,19 +142,19 @@ func WriteState(state *State) error {
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		cleanup()
-		return tracerr.Wrap(err)
+		return err
 	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
-		return tracerr.Wrap(err)
+		return err
 	}
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		cleanup()
-		return tracerr.Wrap(err)
+		return err
 	}
 	if err := os.Rename(tmpName, stateFile); err != nil {
 		cleanup()
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	return nil
@@ -178,7 +176,7 @@ func WriteState(state *State) error {
 func RecordSyncSuccess(repo string) error {
 	state, err := ReadState()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	now := time.Now()
@@ -200,7 +198,7 @@ func RecordSyncSuccess(repo string) error {
 	}
 
 	if err := WriteState(state); err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	return nil
 }
@@ -215,7 +213,7 @@ func RecordSyncSuccess(repo string) error {
 func StateModTime() (time.Time, error) {
 	stateFile, err := StateFile()
 	if err != nil {
-		return time.Time{}, tracerr.Wrap(err)
+		return time.Time{}, err
 	}
 
 	info, err := os.Stat(stateFile)
@@ -223,7 +221,7 @@ func StateModTime() (time.Time, error) {
 		if os.IsNotExist(err) {
 			return time.Time{}, nil
 		}
-		return time.Time{}, tracerr.Wrap(err)
+		return time.Time{}, err
 	}
 
 	return info.ModTime(), nil

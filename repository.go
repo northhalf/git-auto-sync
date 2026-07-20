@@ -2,11 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/ztrue/tracerr"
 )
 
 var errRepoPathInvalid = errors.New("not a valid git repo")
@@ -26,23 +26,23 @@ var errRepoPathInvalid = errors.New("not a valid git repo")
 func isValidGitRepo(repoPath string) (string, error) {
 	info, err := os.Stat(repoPath)
 	if err != nil || !info.IsDir() {
-		return "", tracerr.Errorf("%w - %s", errRepoPathInvalid, repoPath)
+		return "", fmt.Errorf("%w - %s", errRepoPathInvalid, repoPath)
 	}
 
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
-		return "", tracerr.Errorf("Not a valid git repo - %s\n%w", repoPath, err)
+		return "", fmt.Errorf("%w - %s\n%w", errRepoPathInvalid, repoPath, err)
 	}
 
 	worktree, err := repo.Worktree()
 	if err != nil {
-		return "", tracerr.Errorf("Not a valid git repo - %s\n%w", repoPath, err)
+		return "", fmt.Errorf("%w - %s\n%w", errRepoPathInvalid, repoPath, err)
 	}
 
 	root := worktree.Filesystem.Root()
 	info, err = os.Stat(filepath.Join(root, ".git"))
 	if err != nil || !info.IsDir() {
-		return "", tracerr.Errorf("%w - %s", errRepoPathInvalid, repoPath)
+		return "", fmt.Errorf("%w - %s", errRepoPathInvalid, repoPath)
 	}
 
 	return root, nil

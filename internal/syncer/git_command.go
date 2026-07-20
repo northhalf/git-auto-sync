@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -11,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 // @description    Builds the Git subprocess command for the current platform.
@@ -104,7 +104,7 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 			k, _, _ := strings.Cut(e, "=")
 			keys = append(keys, k)
 		}
-		return outb, tracerr.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, keys, outb.String(), errb.String())
+		return outb, fmt.Errorf("%w: Command: %s\nEnv: %s\nStdOut: %s\nStdErr: %s", err, fullCmd, keys, outb.String(), errb.String())
 	}
 
 	logger.Debug("git command completed", "operation", operation)

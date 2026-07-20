@@ -3,8 +3,6 @@ package config
 import (
 	"os"
 	"time"
-
-	"github.com/ztrue/tracerr"
 )
 
 // RepoConfig holds resolved repository synchronization settings.
@@ -30,12 +28,12 @@ type RepoConfig struct {
 func NewRepoConfig(repoPath string) (RepoConfig, error) {
 	global, err := ReadGlobalSettings()
 	if err != nil {
-		return RepoConfig{}, tracerr.Wrap(err)
+		return RepoConfig{}, err
 	}
 
 	local, err := ReadLocalSettings(repoPath)
 	if err != nil {
-		return RepoConfig{}, tracerr.Wrap(err)
+		return RepoConfig{}, err
 	}
 
 	syncInterval, debounce, gitExec := Resolve(global, local)
@@ -44,7 +42,7 @@ func NewRepoConfig(repoPath string) (RepoConfig, error) {
 	// An unset gitexec defaults to git and is resolved through PATH at subprocess time.
 	if (local != nil && local.GitExec != nil) || (global != nil && global.GitExec != nil) {
 		if _, err := os.Stat(gitExec); err != nil {
-			return RepoConfig{}, tracerr.Wrap(err)
+			return RepoConfig{}, err
 		}
 	}
 

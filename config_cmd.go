@@ -9,7 +9,6 @@ import (
 
 	cfg "github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/urfave/cli/v2"
-	"github.com/ztrue/tracerr"
 )
 
 // errConfigUsage signals a config command usage error.
@@ -48,7 +47,7 @@ func configCommand() *cli.Command {
 // @return          error  "nil on success, or a usage, validation, or storage error"
 func configCmd(ctx *cli.Context) error {
 	if ctx.Bool("global") && ctx.Bool("local") {
-		return tracerr.Wrap(errConfigUsage)
+		return errConfigUsage
 	}
 
 	args := ctx.Args().Slice()
@@ -58,7 +57,7 @@ func configCmd(ctx *cli.Context) error {
 	}
 	if ctx.Bool("unset") {
 		if len(args) != 1 {
-			return tracerr.Wrap(errConfigUsage)
+			return errConfigUsage
 		}
 		return configUnset(ctx, args[0])
 	}
@@ -68,7 +67,7 @@ func configCmd(ctx *cli.Context) error {
 	if len(args) == 1 {
 		return configGet(ctx, args[0])
 	}
-	return tracerr.Wrap(errConfigUsage)
+	return errConfigUsage
 }
 
 // @description    Reports whether the command targets the repository-local config.
@@ -93,27 +92,27 @@ func scopeLocal(ctx *cli.Context) bool { return ctx.Bool("local") }
 func configSet(ctx *cli.Context, key, value string) error {
 	field, ok := cfg.SettingKeys[key]
 	if !ok {
-		return tracerr.Errorf("unknown setting: %s", key)
+		return fmt.Errorf("unknown setting: %s", key)
 	}
 	parsed, err := parseValue(key, value)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if scopeLocal(ctx) {
 		repoPath, err := currentRepoPath()
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 		return cfg.SetLocalSetting(repoPath, key, parsed)
 	}
 
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	if err := field.Decode(settings, parsed); err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	return cfg.WriteGlobalSettings(settings)
 }
@@ -131,17 +130,17 @@ func configSet(ctx *cli.Context, key, value string) error {
 func configGet(ctx *cli.Context, key string) error {
 	field, ok := cfg.SettingKeys[key]
 	if !ok {
-		return tracerr.Errorf("unknown setting: %s", key)
+		return fmt.Errorf("unknown setting: %s", key)
 	}
 
 	if scopeLocal(ctx) {
 		repoPath, err := currentRepoPath()
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 		local, err := cfg.ReadLocalSettings(repoPath)
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 		if v, ok := field.Raw(local); ok {
 			_, _ = fmt.Fprintln(ctx.App.Writer, v)
@@ -151,14 +150,14 @@ func configGet(ctx *cli.Context, key string) error {
 
 	global, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	local := &cfg.Settings{}
 	repoPath, repoErr := currentRepoPath()
 	if repoErr == nil {
 		local, err = cfg.ReadLocalSettings(repoPath)
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 	}
 	sync, debounce, gitExec := cfg.Resolve(global, local)
@@ -183,14 +182,14 @@ func configGet(ctx *cli.Context, key string) error {
 func configList(ctx *cli.Context) error {
 	global, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	local := &cfg.Settings{}
 	repoPath, repoErr := currentRepoPath()
 	if repoErr == nil {
 		local, err = cfg.ReadLocalSettings(repoPath)
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 	}
 	sync, debounce, gitExec := cfg.Resolve(global, local)
@@ -213,20 +212,20 @@ func configList(ctx *cli.Context) error {
 func configUnset(ctx *cli.Context, key string) error {
 	field, ok := cfg.SettingKeys[key]
 	if !ok {
-		return tracerr.Errorf("unknown setting: %s", key)
+		return fmt.Errorf("unknown setting: %s", key)
 	}
 
 	if scopeLocal(ctx) {
 		repoPath, err := currentRepoPath()
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 		return cfg.UnsetLocalSetting(repoPath, key)
 	}
 
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 	field.Clear(settings)
 	return cfg.WriteGlobalSettings(settings)
@@ -249,19 +248,19 @@ func parseValue(key, value string) (string, error) {
 	case "syncInterval", "debounce":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return "", tracerr.Errorf("invalid %s: %s", key, value)
+			return "", fmt.Errorf("invalid %s: %s", key, value)
 		}
 		if n <= 0 {
-			return "", tracerr.Errorf("%s must be positive: %d", key, n)
+			return "", fmt.Errorf("%s must be positive: %d", key, n)
 		}
 		return strconv.Itoa(n), nil
 	case "gitexec":
 		if _, err := os.Stat(value); err != nil {
-			return "", tracerr.Wrap(err)
+			return "", err
 		}
 		return value, nil
 	}
-	return "", tracerr.Errorf("unknown setting: %s", key)
+	return "", fmt.Errorf("unknown setting: %s", key)
 }
 
 // @description    Returns the repository root for the current directory.
@@ -275,7 +274,7 @@ func parseValue(key, value string) (string, error) {
 func currentRepoPath() (string, error) {
 	repoPath, err := os.Getwd()
 	if err != nil {
-		return "", tracerr.Wrap(err)
+		return "", err
 	}
 	return isValidGitRepo(repoPath)
 }

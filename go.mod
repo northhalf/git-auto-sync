@@ -10,7 +10,6 @@ require (
 	github.com/prashantgupta24/mac-sleep-notifier v1.0.1
 	github.com/rjeczalik/notify v0.9.3
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/ztrue/tracerr v0.4.0
 	golang.org/x/sys v0.47.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gotest.tools/v3 v3.5.2

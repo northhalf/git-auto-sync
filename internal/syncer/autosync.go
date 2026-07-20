@@ -6,7 +6,6 @@ import (
 
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/notification"
-	"github.com/ztrue/tracerr"
 )
 
 var sendAlert = notification.Alert
@@ -36,24 +35,24 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 			// daemon status shows the real reason the repository paused.
 			logger.Warn("send repo state alert failed", "error", alertErr)
 		}
-		return tracerr.Wrap(newSyncError(repoStateStage(err), err))
+		return newSyncError(repoStateStage(err), err)
 	}
 
 	if err := ensureGitAuthor(logger, repoConfig); err != nil {
-		return tracerr.Wrap(newSyncError(syncStageAuthor, err))
+		return newSyncError(syncStageAuthor, err)
 	}
 
 	if err := commit(logger, repoConfig); err != nil {
-		return tracerr.Wrap(newSyncError(syncStageCommit, err))
+		return newSyncError(syncStageCommit, err)
 	}
 
 	if err := fetch(logger, repoConfig); err != nil {
-		return tracerr.Wrap(newSyncError(syncStageFetch, err))
+		return newSyncError(syncStageFetch, err)
 	}
 
 	state, err := resolveUpstreamState(logger, repoConfig)
 	if err != nil {
-		return tracerr.Wrap(newSyncError(syncStageCompare, err))
+		return newSyncError(syncStageCompare, err)
 	}
 	logger.Info("sync state resolved", "state", state)
 
@@ -62,7 +61,7 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		// Nothing to rebase or push: HEAD has no upstream or already matches it.
 	case upstreamStateLocalAhead:
 		if err := push(logger, repoConfig); err != nil {
-			return tracerr.Wrap(newSyncError(syncStagePush, err))
+			return newSyncError(syncStagePush, err)
 		}
 	case upstreamStateUpstreamAhead, upstreamStateDiverged:
 		if err := rebase(logger, repoConfig); err != nil {
@@ -74,11 +73,11 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 					logger.Warn("send rebase conflict alert failed", "error", alertErr)
 				}
 			}
-			return tracerr.Wrap(newSyncError(syncStageRebase, err))
+			return newSyncError(syncStageRebase, err)
 		}
 		if state == upstreamStateDiverged {
 			if err := push(logger, repoConfig); err != nil {
-				return tracerr.Wrap(newSyncError(syncStagePush, err))
+				return newSyncError(syncStagePush, err)
 			}
 		}
 	}

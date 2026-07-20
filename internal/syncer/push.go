@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 // @description    Pushes to the configured upstream.
@@ -23,7 +22,7 @@ func push(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	bi, err := fetchBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		logger.Error("push failed", "operation", "read branch information", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if bi.UpstreamBranch == "" || bi.UpstreamRemote == "" {
@@ -33,7 +32,7 @@ func push(logger *slog.Logger, repoConfig config.RepoConfig) error {
 
 	if _, err := gitCommand(logger, repoConfig, []string{"push", bi.UpstreamRemote, bi.UpstreamBranch}); err != nil {
 		logger.Error("push failed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch, "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	logger.Info("push completed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch)

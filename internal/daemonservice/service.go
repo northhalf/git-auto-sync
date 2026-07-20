@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/kardianos/service"
-	"github.com/ztrue/tracerr"
 )
 
 // ErrNotInstalled indicates the daemon service is not installed. Status returns it so callers can
@@ -47,7 +46,7 @@ func isNotInstalled(err error) bool {
 func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
 	backend, err := newServiceBackend(daemon)
 	if err != nil {
-		return Service{}, tracerr.Wrap(err)
+		return Service{}, err
 	}
 	return Service{Service: backend}, nil
 }
@@ -99,7 +98,7 @@ func (srv Service) EnsureRunning() error {
 	status, err := srv.Service.Status()
 	if err != nil {
 		if !isNotInstalled(err) {
-			return tracerr.Wrap(err)
+			return err
 		}
 		// Not installed: install and start.
 		if err := srv.Service.Install(); err != nil {
@@ -108,13 +107,13 @@ func (srv Service) EnsureRunning() error {
 				_ = srv.Service.Uninstall()
 				_ = srv.Service.Install()
 			} else {
-				return tracerr.Wrap(err)
+				return err
 			}
 		} else {
 			logStep("Installing git-auto-sync as a daemon")
 		}
 		logStep("Starting git-auto-sync-daemon")
-		return tracerr.Wrap(srv.Service.Start())
+		return srv.Service.Start()
 	}
 
 	if status == service.StatusRunning {
@@ -122,7 +121,7 @@ func (srv Service) EnsureRunning() error {
 	}
 
 	logStep("Starting git-auto-sync-daemon")
-	return tracerr.Wrap(srv.Service.Start())
+	return srv.Service.Start()
 }
 
 // @description    Stops the daemon service without uninstalling it.
@@ -135,7 +134,7 @@ func (srv Service) EnsureRunning() error {
 func (srv Service) Stop() error {
 	logStep("Stopping git-auto-sync-daemon")
 	if err := srv.Service.Stop(); err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	return nil
@@ -156,12 +155,12 @@ func (srv Service) Restart() error {
 
 	if status == service.StatusRunning {
 		if err := srv.Stop(); err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 	}
 
 	logStep("Restarting git-auto-sync-daemon")
-	return tracerr.Wrap(srv.Service.Start())
+	return srv.Service.Start()
 }
 
 // @description    Disable stops and uninstalls the daemon user service.
@@ -178,19 +177,19 @@ func (srv Service) Disable() error {
 		if errors.Is(err, ErrNotInstalled) {
 			return nil
 		}
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if status == service.StatusRunning {
 		logStep("Stopping git-auto-sync-daemon")
 		if err := srv.Service.Stop(); err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 	}
 
 	logStep("Uninstalling git-auto-sync as a daemon")
 	if err := srv.Service.Uninstall(); err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	return nil
@@ -211,7 +210,7 @@ func (srv Service) Status() (service.Status, error) {
 		if isNotInstalled(err) {
 			return service.StatusUnknown, ErrNotInstalled
 		}
-		return service.StatusUnknown, tracerr.Wrap(err)
+		return service.StatusUnknown, err
 	}
 	return status, nil
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/daemonservice"
 	"github.com/northhalf/git-auto-sync/internal/daemonstate"
 	"github.com/urfave/cli/v2"
-	"github.com/ztrue/tracerr"
 )
 
 // cliDaemon satisfies the service interface for CLI service management without starting a process.
@@ -56,7 +55,7 @@ func (cliDaemon) Stop(service.Service) error { return nil }
 func daemonStatus(ctx *cli.Context) error {
 	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	status, err := s.Status()
@@ -65,7 +64,7 @@ func daemonStatus(ctx *cli.Context) error {
 		fmt.Println("git-auto-sync-daemon is NOT installed!")
 		return nil
 	case err != nil:
-		return tracerr.Wrap(err)
+		return err
 	case status == service.StatusRunning:
 		fmt.Println("git-auto-sync-daemon is Running!")
 	case status == service.StatusStopped:
@@ -77,12 +76,12 @@ func daemonStatus(ctx *cli.Context) error {
 
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	state, err := daemonstate.ReadState()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	fmt.Println("Monitoring - ")
@@ -105,19 +104,19 @@ func daemonStatus(ctx *cli.Context) error {
 func daemonRun(ctx *cli.Context) error {
 	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	alreadyRunning := false
 	if status, queryErr := s.Status(); queryErr == nil {
 		alreadyRunning = status == service.StatusRunning
 	} else if !errors.Is(queryErr, daemonservice.ErrNotInstalled) {
-		return tracerr.Wrap(queryErr)
+		return queryErr
 	}
 
 	if err := s.EnsureRunning(); err != nil {
 		fmt.Println("git-auto-sync-daemon failed to start")
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if alreadyRunning {
@@ -141,7 +140,7 @@ func daemonRun(ctx *cli.Context) error {
 func daemonStop(ctx *cli.Context) error {
 	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	status, queryErr := s.Status()
@@ -150,7 +149,7 @@ func daemonStop(ctx *cli.Context) error {
 			fmt.Println("git-auto-sync-daemon is NOT installed")
 			return nil
 		}
-		return tracerr.Wrap(queryErr)
+		return queryErr
 	}
 
 	if status != service.StatusRunning {
@@ -160,7 +159,7 @@ func daemonStop(ctx *cli.Context) error {
 
 	if err := s.Stop(); err != nil {
 		fmt.Println("git-auto-sync-daemon failed to stop")
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	fmt.Println("git-auto-sync-daemon stopped successfully")
@@ -179,7 +178,7 @@ func daemonStop(ctx *cli.Context) error {
 func daemonRestart(ctx *cli.Context) error {
 	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if err := s.Restart(); err != nil {
@@ -188,7 +187,7 @@ func daemonRestart(ctx *cli.Context) error {
 			return nil
 		}
 		fmt.Println("git-auto-sync-daemon failed to restart")
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	fmt.Println("git-auto-sync-daemon restarted successfully")
@@ -208,7 +207,7 @@ func daemonRestart(ctx *cli.Context) error {
 func daemonUninstall(ctx *cli.Context) error {
 	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	status, queryErr := s.Status()
@@ -217,7 +216,7 @@ func daemonUninstall(ctx *cli.Context) error {
 			fmt.Println("git-auto-sync-daemon is NOT installed")
 			return nil
 		}
-		return tracerr.Wrap(queryErr)
+		return queryErr
 	}
 
 	if status == service.StatusRunning {
@@ -226,7 +225,7 @@ func daemonUninstall(ctx *cli.Context) error {
 
 	if err := s.Disable(); err != nil {
 		fmt.Println("git-auto-sync-daemon failed to uninstall")
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	fmt.Println("git-auto-sync-daemon uninstalled successfully")
@@ -245,12 +244,12 @@ func daemonUninstall(ctx *cli.Context) error {
 func daemonList(ctx *cli.Context) error {
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	state, err := daemonstate.ReadState()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	fmt.Println("daemon:", daemonServiceStatus())
@@ -522,17 +521,17 @@ func daemonAdd(ctx *cli.Context) error {
 	repoPath := ctx.Args().First()
 	repoPath, err := filepath.Abs(repoPath)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	repoPath, err = isValidGitRepo(repoPath)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if slices.Contains(settings.Repos, repoPath) {
@@ -543,17 +542,17 @@ func daemonAdd(ctx *cli.Context) error {
 
 	err = cfg.WriteGlobalSettings(settings)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	err = s.EnsureRunning()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	return nil
@@ -571,17 +570,17 @@ func daemonRm(ctx *cli.Context) error {
 	repoPath := ctx.Args().First()
 	repoPath, err := filepath.Abs(repoPath)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	repoPath, err = isValidGitRepo(repoPath)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	pos := -1
@@ -594,24 +593,24 @@ func daemonRm(ctx *cli.Context) error {
 
 	if pos == -1 {
 		err = errors.New("repo not tracked")
-		return tracerr.Errorf("%w - %s", err, repoPath)
+		return fmt.Errorf("%w - %s", err, repoPath)
 	}
 
 	settings.Repos = append(settings.Repos[:pos], settings.Repos[pos+1:]...)
 	err = cfg.WriteGlobalSettings(settings)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	if len(settings.Repos) == 0 {
 		s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 
 		err = s.Disable()
 		if err != nil {
-			return tracerr.Wrap(err)
+			return err
 		}
 	}
 
@@ -638,7 +637,7 @@ func daemonEnv(ctx *cli.Context) error {
 
 	settings, err := cfg.ReadGlobalSettings()
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	envMap := make(map[string]string, len(settings.Envs)+len(vars))
@@ -657,7 +656,7 @@ func daemonEnv(ctx *cli.Context) error {
 	}
 	err = cfg.WriteGlobalSettings(settings)
 	if err != nil {
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	fmt.Println(strings.Join(settings.Envs, "\n"))

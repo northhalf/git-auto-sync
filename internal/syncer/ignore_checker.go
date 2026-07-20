@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
-	"github.com/ztrue/tracerr"
 )
 
 // @description    Caches a repository's Git index and ignore rules for repeated ignore checks.
@@ -36,23 +35,23 @@ type IgnoreChecker struct {
 func NewIgnoreChecker(repoPath string) (*IgnoreChecker, error) {
 	repoPath, err := filepath.Abs(repoPath)
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 	repoPath = filepath.Clean(repoPath)
 
 	resolvedRepoPath, err := filepath.EvalSymlinks(repoPath)
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	index, err := repo.Storer.Index()
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	tracked := make(map[string]struct{}, len(index.Entries))
@@ -62,12 +61,12 @@ func NewIgnoreChecker(repoPath string) (*IgnoreChecker, error) {
 
 	w, err := repo.Worktree()
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 
 	patterns, err := gitignore.ReadPatterns(w.Filesystem, nil)
 	if err != nil {
-		return nil, tracerr.Wrap(err)
+		return nil, err
 	}
 	patterns = append(patterns, w.Excludes...)
 	matcher := gitignore.NewMatcher(patterns)
@@ -99,7 +98,7 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 
 	repoPath, filePath, relativePath, err := c.resolvePath(filePath)
 	if err != nil {
-		return false, tracerr.Wrap(err)
+		return false, err
 	}
 
 	if _, ok := c.tracked[relativePath]; ok {
@@ -149,7 +148,7 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 
 	empty, err := isEmptyFile(filePath)
 	if err != nil {
-		return false, tracerr.Wrap(err)
+		return false, err
 	}
 	if empty && fileName != ".gitkeep" {
 		return true, nil
@@ -205,7 +204,7 @@ func (c *IgnoreChecker) resolvePath(filePath string) (
 
 	resolvedFilePath, err = resolveExistingPath(filePath)
 	if err != nil {
-		return "", "", "", tracerr.Wrap(err)
+		return "", "", "", err
 	}
 	resolvedRel, resolvedInside, resolvedErr = relativeInsideRepo(c.resolvedRepoPath, resolvedFilePath)
 	if resolvedErr == nil && resolvedInside {
@@ -213,7 +212,7 @@ func (c *IgnoreChecker) resolvePath(filePath string) (
 	}
 
 	if originalErr != nil {
-		return "", "", "", tracerr.Wrap(originalErr)
+		return "", "", "", originalErr
 	}
 	return c.repoPath, filePath, originalRel, nil
 }
@@ -232,7 +231,7 @@ func (c *IgnoreChecker) resolvePath(filePath string) (
 func relativeInsideRepo(repoPath string, filePath string) (string, bool, error) {
 	relativePath, err := filepath.Rel(repoPath, filePath)
 	if err != nil {
-		return "", false, tracerr.Wrap(err)
+		return "", false, err
 	}
 	relativePath = filepath.ToSlash(relativePath)
 	outside := relativePath == ".." || strings.HasPrefix(relativePath, "../")
@@ -262,12 +261,12 @@ func resolveExistingPath(filePath string) (string, error) {
 			return filepath.Clean(resolved), nil
 		}
 		if !os.IsNotExist(err) {
-			return "", tracerr.Wrap(err)
+			return "", err
 		}
 
 		parent := filepath.Dir(candidate)
 		if parent == candidate {
-			return "", tracerr.Wrap(err)
+			return "", err
 		}
 		missingParts = append(missingParts, filepath.Base(candidate))
 		candidate = parent

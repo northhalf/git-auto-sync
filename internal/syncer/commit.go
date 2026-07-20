@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 // @description    Commits eligible worktree changes.
@@ -32,13 +31,13 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	statusOut, err := gitCommand(logger, repoConfig, []string{"status", "--porcelain", "-z", "--no-renames", "--untracked-files=all"})
 	if err != nil {
 		logger.Error("commit failed", "operation", "read status", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	checker, err := NewIgnoreChecker(repoPath)
 	if err != nil {
 		logger.Error("commit failed", "operation", "build ignore checker", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	hasChanges := false
@@ -59,7 +58,7 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		ignore, err := checker.ShouldIgnore(filePath)
 		if err != nil {
 			logger.Error("commit failed", "operation", "check ignored file", "path", filePath, "error", err)
-			return tracerr.Wrap(err)
+			return err
 		}
 		if ignore {
 			continue
@@ -68,7 +67,7 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		hasChanges = true
 		if _, err := gitCommand(logger, repoConfig, []string{"add", "--", filePath}); err != nil {
 			logger.Error("commit failed", "operation", "stage file", "path", filePath, "error", err)
-			return tracerr.Wrap(err)
+			return err
 		}
 
 		commitMsg = append(commitMsg, record)
@@ -91,7 +90,7 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	stagedOut, err := gitCommand(logger, repoConfig, []string{"diff", "--cached", "--name-only", "-z"})
 	if err != nil {
 		logger.Error("commit failed", "operation", "check staged changes", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 	if len(stagedOut.String()) == 0 {
 		logger.Info("commit skipped", "reason", "no staged changes")
@@ -100,7 +99,7 @@ func commit(logger *slog.Logger, repoConfig config.RepoConfig) error {
 
 	if _, err := gitCommand(logger, repoConfig, []string{"commit", "-m", msg}); err != nil {
 		logger.Error("commit failed", "operation", "create commit", "error", err)
-		return tracerr.Wrap(err)
+		return err
 	}
 
 	logger.Info("commit completed", "msgs", strings.Join(commitMsg, " "))

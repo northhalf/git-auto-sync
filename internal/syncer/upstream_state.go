@@ -1,11 +1,11 @@
 package syncer
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"github.com/ztrue/tracerr"
 )
 
 // upstreamState describes how HEAD relates to its configured upstream after fetch has refreshed the
@@ -47,7 +47,7 @@ func resolveUpstreamState(logger *slog.Logger, repoConfig config.RepoConfig) (up
 	bi, err := fetchBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		logger.Error("resolve upstream state failed", "operation", "read branch information", "error", err)
-		return "", tracerr.Wrap(err)
+		return "", err
 	}
 
 	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
@@ -59,13 +59,13 @@ func resolveUpstreamState(logger *slog.Logger, repoConfig config.RepoConfig) (up
 	revOut, err := gitCommand(logger, repoConfig, []string{"rev-parse", "HEAD", ref})
 	if err != nil {
 		logger.Error("resolve upstream state failed", "operation", "resolve refs", "ref", ref, "error", err)
-		return "", tracerr.Wrap(err)
+		return "", err
 	}
 
 	lines := strings.Split(strings.TrimSpace(revOut.String()), "\n")
 	if len(lines) < 2 {
 		logger.Error("resolve upstream state failed", "operation", "parse refs", "ref", ref)
-		return "", tracerr.Errorf("unexpected rev-parse output for %s", ref)
+		return "", fmt.Errorf("unexpected rev-parse output for %s", ref)
 	}
 	headSha := strings.TrimSpace(lines[0])
 	upstreamSha := strings.TrimSpace(lines[1])
@@ -77,7 +77,7 @@ func resolveUpstreamState(logger *slog.Logger, repoConfig config.RepoConfig) (up
 	baseOut, err := gitCommand(logger, repoConfig, []string{"merge-base", "HEAD", ref})
 	if err != nil {
 		logger.Error("resolve upstream state failed", "operation", "merge-base", "ref", ref, "error", err)
-		return "", tracerr.Wrap(err)
+		return "", err
 	}
 	baseSha := strings.TrimSpace(baseOut.String())
 
