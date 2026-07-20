@@ -73,8 +73,6 @@ func daemonStatus(ctx *cli.Context) error {
 		return nil
 	case status == service.StatusUnknown:
 		// No user-facing message for an unknown status.
-	default:
-		fmt.Println("git-auto-sync-daemon status is Unknown. How mysterious!")
 	}
 
 	settings, err := cfg.ReadGlobalSettings()

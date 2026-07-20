@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -17,8 +16,6 @@ const (
 	cliLogFilename    = "git-auto-sync.log"
 	daemonLogFilename = "git-auto-sync-daemon.log"
 )
-
-var projectSourceRoot = sourceRoot()
 
 // @description    Initializes the shared CLI logger.
 //
@@ -201,27 +198,12 @@ func newHandlerOptions(debug bool) *slog.HandlerOptions {
 				if !ok {
 					return attr
 				}
-				file, err := filepath.Rel(projectSourceRoot, source.File)
-				if err != nil || strings.HasPrefix(file, "..") {
-					file = filepath.Base(source.File)
-				}
-				return slog.String(slog.SourceKey, filepath.ToSlash(file))
+				return slog.String(slog.SourceKey, filepath.Base(source.File))
 			default:
 				return attr
 			}
 		},
 	}
-}
-
-// @description    Returns the source-tree root used to shorten debug source paths.
-//
-// @return          string  "project root derived from this package's source file"
-func sourceRoot() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "."
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
 // @description    Returns a named default log file path for the current platform.

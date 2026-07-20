@@ -22,10 +22,6 @@ var watcherRetryDelays = []time.Duration{
 	60 * time.Minute,
 }
 
-type AwakeNotifier interface {
-	Start(context.Context, chan<- bool) error
-}
-
 // @description    Synchronizes and watches a repository.
 //
 // WatchForChanges starts filesystem and wake notifications before the initial synchronization, then

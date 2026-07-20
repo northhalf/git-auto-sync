@@ -2,7 +2,13 @@
 
 package watcher
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+)
+
+// AwakeNotifierAndroid is a no-op wake source for Android, where systemd-logind is unavailable.
+type AwakeNotifierAndroid struct{}
 
 // @description    Creates the Android no-op awake notifier.
 //
@@ -13,4 +19,15 @@ import "log/slog"
 // @return          error                  "always nil"
 func NewAwakeNotifier(logger *slog.Logger) (*AwakeNotifierAndroid, error) {
 	return &AwakeNotifierAndroid{}, nil
+}
+
+// @description    Leaves Android wake notifications disabled.
+//
+// @param           ctx  "unused watcher context"
+//
+// @param           out  "unused wake event channel"
+//
+// @return          error  "always nil"
+func (a *AwakeNotifierAndroid) Start(ctx context.Context, out chan<- bool) error {
+	return nil
 }

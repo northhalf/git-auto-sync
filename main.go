@@ -16,6 +16,7 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/daemonstate"
 	"github.com/northhalf/git-auto-sync/internal/logging"
+	"github.com/northhalf/git-auto-sync/internal/notification"
 	"github.com/northhalf/git-auto-sync/internal/syncer"
 	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
@@ -50,7 +51,10 @@ func main() {
 				Name:    "watch",
 				Aliases: []string{"monitor", "w", "m"},
 				Usage:   "Monitor a folder for changes",
-				Before:  notificationAvailabilityHook,
+				Before: func(ctx *cli.Context) error {
+					notification.WarnIfUnavailable(slog.Default())
+					return nil
+				},
 				Action: func(ctx *cli.Context) error {
 					repoPath, err := os.Getwd()
 					if err != nil {
@@ -74,7 +78,10 @@ func main() {
 				Name:    "sync",
 				Aliases: []string{"s"},
 				Usage:   "Sync a repo right now",
-				Before:  notificationAvailabilityHook,
+				Before: func(ctx *cli.Context) error {
+					notification.WarnIfUnavailable(slog.Default())
+					return nil
+				},
 				Flags: []cli.Flag{
 					&cli.StringSliceFlag{
 						Name:    "env",
@@ -149,7 +156,10 @@ func main() {
 				Name:    "daemon",
 				Aliases: []string{"d"},
 				Usage:   "Interact with the background daemon",
-				Before:  notificationAvailabilityHook,
+				Before: func(ctx *cli.Context) error {
+					notification.WarnIfUnavailable(slog.Default())
+					return nil
+				},
 				Subcommands: []*cli.Command{
 					{
 						Name:   "status",

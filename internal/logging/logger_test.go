@@ -190,8 +190,8 @@ func TestHandlerOptionsDebugAddsSource(t *testing.T) {
 	logger.Info("source record")
 
 	got := output.String()
-	if !strings.Contains(got, "source=internal/logging/logger_test.go") {
-		t.Fatalf("debug output %q does not contain project-relative caller source", got)
+	if !strings.Contains(got, "source=logger_test.go") {
+		t.Fatalf("debug output %q does not contain the caller source file name", got)
 	}
 	if strings.Contains(got, "logger_test.go:") {
 		t.Fatalf("debug output %q contains a source line number", got)
