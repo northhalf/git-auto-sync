@@ -3,10 +3,10 @@ package syncer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Verifies IgnoreChecker matches ShouldIgnoreFile on existing cases.
@@ -36,20 +36,32 @@ func Test_IgnoreChecker_EquivalentToShouldIgnoreFile(t *testing.T) {
 	}
 
 	checker, err := NewIgnoreChecker(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	for _, p := range paths {
 		got, err := checker.ShouldIgnore(p)
 		want, wantErr := ShouldIgnoreFile(repoPath, p)
 
 		if p == "" {
-			assert.ErrorContains(t, err, "path")
-			assert.ErrorContains(t, wantErr, "path")
+			if err == nil || !strings.Contains(err.Error(), "path") {
+				t.Fatalf("error %v does not contain %q", err, "path")
+			}
+			if wantErr == nil || !strings.Contains(wantErr.Error(), "path") {
+				t.Fatalf("error %v does not contain %q", wantErr, "path")
+			}
 			continue
 		}
-		assert.NilError(t, err)
-		assert.NilError(t, wantErr)
-		assert.Equal(t, got, want, "mismatch for path %q", p)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if wantErr != nil {
+			t.Fatalf("unexpected error: %v", wantErr)
+		}
+		if got != want {
+			t.Fatalf("mismatch for path %q: got %v, want %v", p, got, want)
+		}
 	}
 }
 
@@ -62,40 +74,68 @@ func Test_IgnoreChecker_EquivalentToShouldIgnoreFile(t *testing.T) {
 func Test_IgnoreChecker_RoundReuse(t *testing.T) {
 	repoPath := t.TempDir()
 	repo, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	worktree, err := repo.Worktree()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// A tracked file (staged) must bypass every filter.
 	trackedPath := filepath.Join(repoPath, ".tracked")
-	assert.NilError(t, os.WriteFile(trackedPath, []byte("tracked"), 0o600))
+	if err := os.WriteFile(trackedPath, []byte("tracked"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	_, err = worktree.Add(".tracked")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// An untracked hidden file must be ignored.
 	hiddenPath := filepath.Join(repoPath, ".cache", "file")
-	assert.NilError(t, os.MkdirAll(filepath.Dir(hiddenPath), 0o700))
-	assert.NilError(t, os.WriteFile(hiddenPath, []byte("x"), 0o600))
+	if err := os.MkdirAll(filepath.Dir(hiddenPath), 0o700); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := os.WriteFile(hiddenPath, []byte("x"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// An untracked non-hidden, non-ignored file must be eligible.
 	plainPath := filepath.Join(repoPath, "plain.md")
-	assert.NilError(t, os.WriteFile(plainPath, []byte("plain"), 0o600))
+	if err := os.WriteFile(plainPath, []byte("plain"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	checker, err := NewIgnoreChecker(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ignore, err := checker.ShouldIgnore(trackedPath)
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != false {
+		t.Fatalf("got %v, want %v", ignore, false)
+	}
 
 	ignore, err = checker.ShouldIgnore(hiddenPath)
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != true {
+		t.Fatalf("got %v, want %v", ignore, true)
+	}
 
 	ignore, err = checker.ShouldIgnore(plainPath)
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != false {
+		t.Fatalf("got %v, want %v", ignore, false)
+	}
 }
 
 // @description    Verifies staged files bypass filters and gitignored files are excluded.
@@ -108,31 +148,53 @@ func Test_IgnoreChecker_RoundReuse(t *testing.T) {
 func Test_IgnoreChecker_TrackedBypassesAndGitignoreExcludes(t *testing.T) {
 	repoPath := t.TempDir()
 	repo, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	worktree, err := repo.Worktree()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	trackedIgnoredPath := filepath.Join(repoPath, "ignored.txt")
-	assert.NilError(t, os.WriteFile(trackedIgnoredPath, []byte("tracked"), 0o600))
+	if err := os.WriteFile(trackedIgnoredPath, []byte("tracked"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	_, err = worktree.Add("ignored.txt")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	untrackedIgnoredPath := filepath.Join(repoPath, "untracked.txt")
-	assert.NilError(t, os.WriteFile(untrackedIgnoredPath, []byte("untracked"), 0o600))
+	if err := os.WriteFile(untrackedIgnoredPath, []byte("untracked"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.NilError(t, os.WriteFile(filepath.Join(repoPath, ".gitignore"), []byte("*.txt\n"), 0o600))
+	if err := os.WriteFile(filepath.Join(repoPath, ".gitignore"), []byte("*.txt\n"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	checker, err := NewIgnoreChecker(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ignore, err := checker.ShouldIgnore(trackedIgnoredPath)
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != false {
+		t.Fatalf("got %v, want %v", ignore, false)
+	}
 
 	ignore, err = checker.ShouldIgnore(untrackedIgnoredPath)
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != true {
+		t.Fatalf("got %v, want %v", ignore, true)
+	}
 }
 
 // @description    Verifies events through a resolved repository path stay inside the repository.
@@ -145,9 +207,13 @@ func Test_IgnoreChecker_TrackedBypassesAndGitignoreExcludes(t *testing.T) {
 func Test_IgnoreChecker_ResolvesRepositorySymlink(t *testing.T) {
 	root := t.TempDir()
 	repoPath := filepath.Join(root, "repo")
-	assert.NilError(t, os.Mkdir(repoPath, 0o700))
+	if err := os.Mkdir(repoPath, 0o700); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	linkedPath := filepath.Join(root, "linked-repo")
 	if err := os.Symlink(repoPath, linkedPath); err != nil {
@@ -155,11 +221,17 @@ func Test_IgnoreChecker_ResolvesRepositorySymlink(t *testing.T) {
 	}
 
 	checker, err := NewIgnoreChecker(linkedPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ignore, err := checker.ShouldIgnore(filepath.Join(repoPath, ".git", "index.lock"))
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != true {
+		t.Fatalf("got %v, want %v", ignore, true)
+	}
 }
 
 // @description    Verifies events reported through a symlink resolve against the real repository.
@@ -172,9 +244,13 @@ func Test_IgnoreChecker_ResolvesRepositorySymlink(t *testing.T) {
 func Test_IgnoreChecker_ResolvesEventSymlink(t *testing.T) {
 	root := t.TempDir()
 	repoPath := filepath.Join(root, "repo")
-	assert.NilError(t, os.Mkdir(repoPath, 0o700))
+	if err := os.Mkdir(repoPath, 0o700); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	linkedPath := filepath.Join(root, "linked-repo")
 	if err := os.Symlink(repoPath, linkedPath); err != nil {
@@ -182,11 +258,17 @@ func Test_IgnoreChecker_ResolvesEventSymlink(t *testing.T) {
 	}
 
 	checker, err := NewIgnoreChecker(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ignore, err := checker.ShouldIgnore(filepath.Join(linkedPath, ".git", "index.lock"))
-	assert.NilError(t, err)
-	assert.Equal(t, ignore, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ignore != true {
+		t.Fatalf("got %v, want %v", ignore, true)
+	}
 }
 
 // @description    Verifies NewIgnoreChecker fails on a non-Git directory.
@@ -199,5 +281,7 @@ func Test_IgnoreChecker_NonGitDirectory(t *testing.T) {
 	repoPath := t.TempDir()
 
 	_, err := NewIgnoreChecker(repoPath)
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }

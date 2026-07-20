@@ -6,7 +6,6 @@ import (
 
 	"github.com/northhalf/git-auto-sync/internal/daemonstate"
 	"github.com/northhalf/git-auto-sync/internal/watcher"
-	"gotest.tools/v3/assert"
 )
 
 // setupDaemonState points XDG_CONFIG_HOME and HOME at a temporary directory so the manager's recorder
@@ -29,17 +28,29 @@ func Test_OnStateRecordsTransitions(t *testing.T) {
 	m := newWatcherManager()
 
 	cb := m.onState("/repo")
-	assert.Assert(t, cb != nil)
+	if cb == nil {
+		t.Fatalf("assertion failed: cb != nil")
+	}
 
 	cb(watcher.StateReport{Paused: false})
 	cb(watcher.StateReport{Paused: true, Stage: "rebase"})
 
 	state, err := daemonstate.ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(state.Repos), 1)
-	assert.Equal(t, state.Repos[0].Repo, "/repo")
-	assert.Equal(t, state.Repos[0].Status, daemonstate.StatusPaused)
-	assert.Equal(t, state.Repos[0].Stage, "rebase")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(state.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(state.Repos), 1)
+	}
+	if state.Repos[0].Repo != "/repo" {
+		t.Fatalf("got %v, want %v", state.Repos[0].Repo, "/repo")
+	}
+	if state.Repos[0].Status != daemonstate.StatusPaused {
+		t.Fatalf("got %v, want %v", state.Repos[0].Status, daemonstate.StatusPaused)
+	}
+	if state.Repos[0].Stage != "rebase" {
+		t.Fatalf("got %v, want %v", state.Repos[0].Stage, "rebase")
+	}
 }
 
 // @description    Verifies onState returns nil without a recorder.
@@ -50,7 +61,9 @@ func Test_OnStateRecordsTransitions(t *testing.T) {
 // @param           t  "test handle used for assertions"
 func Test_OnStateNilWithoutRecorder(t *testing.T) {
 	m := &watcherManager{watchers: make(map[string]*watcherHandle)}
-	assert.Assert(t, m.onState("/repo") == nil)
+	if m.onState("/repo") != nil {
+		t.Fatalf("assertion failed: m.onState(\"/repo\") == nil")
+	}
 }
 
 // @description    Verifies Heartbeat refreshes persisted timestamps.
@@ -65,14 +78,20 @@ func Test_HeartbeatRefreshesState(t *testing.T) {
 
 	m.onState("/repo")(watcher.StateReport{Paused: false})
 	before, err := daemonstate.ReadState()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	time.Sleep(10 * time.Millisecond)
 	m.Heartbeat()
 
 	after, err := daemonstate.ReadState()
-	assert.NilError(t, err)
-	assert.Assert(t, after.Repos[0].UpdatedAt.After(before.Repos[0].UpdatedAt))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !after.Repos[0].UpdatedAt.After(before.Repos[0].UpdatedAt) {
+		t.Fatalf("assertion failed: after.Repos[0].UpdatedAt.After(before.Repos[0].UpdatedAt)")
+	}
 }
 
 // @description    Verifies reconcile removes state when a watcher exits.
@@ -98,8 +117,12 @@ func Test_ReconcileRemovesStateOnExit(t *testing.T) {
 	m.reconcile([]string{}, nil)
 
 	state, err := daemonstate.ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(state.Repos), 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(state.Repos) != 0 {
+		t.Fatalf("got %v, want %v", len(state.Repos), 0)
+	}
 }
 
 // @description    Verifies an unexpected watcher restart preserves its persisted state.
@@ -125,17 +148,29 @@ func Test_ReconcilePreservesStateOnWatcherRestart(t *testing.T) {
 	m.reconcile([]string{"/repo"}, nil)
 
 	state, err := daemonstate.ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(state.Repos), 1)
-	assert.Assert(t, state.Repos[0].LastSyncedAt.Equal(lastSynced))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(state.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(state.Repos), 1)
+	}
+	if !state.Repos[0].LastSyncedAt.Equal(lastSynced) {
+		t.Fatalf("assertion failed: state.Repos[0].LastSyncedAt.Equal(lastSynced)")
+	}
 	updatedAt := state.Repos[0].UpdatedAt
-	assert.Equal(t, len(fs.started), 2)
+	if len(fs.started) != 2 {
+		t.Fatalf("got %v, want %v", len(fs.started), 2)
+	}
 
 	time.Sleep(10 * time.Millisecond)
 	m.Heartbeat()
 	state, err = daemonstate.ReadState()
-	assert.NilError(t, err)
-	assert.Assert(t, state.Repos[0].UpdatedAt.Equal(updatedAt))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !state.Repos[0].UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("assertion failed: state.Repos[0].UpdatedAt.Equal(updatedAt)")
+	}
 }
 
 // @description    Verifies configuration removal deletes state preserved across a restart.
@@ -162,8 +197,12 @@ func Test_ReconcileRemovesForgottenStateAfterConfigRemoval(t *testing.T) {
 	m.reconcile(nil, nil)
 
 	state, err := daemonstate.ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(state.Repos), 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(state.Repos) != 0 {
+		t.Fatalf("got %v, want %v", len(state.Repos), 0)
+	}
 }
 
 // @description    Verifies Heartbeat is a no-op without a recorder.

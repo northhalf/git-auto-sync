@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/northhalf/git-auto-sync/internal/notification"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Verifies synchronization error classification.
@@ -37,9 +36,15 @@ func Test_SyncErrorClassification(t *testing.T) {
 			cause := errors.New("stage failed")
 			err := newSyncError(tt.stage, cause)
 
-			assert.Equal(t, SyncErrorStage(err), tt.stage)
-			assert.Equal(t, IsRemoteSyncError(err), tt.remote)
-			assert.Assert(t, errors.Is(err, cause))
+			if SyncErrorStage(err) != tt.stage {
+				t.Fatalf("got %v, want %v", SyncErrorStage(err), tt.stage)
+			}
+			if IsRemoteSyncError(err) != tt.remote {
+				t.Fatalf("got %v, want %v", IsRemoteSyncError(err), tt.remote)
+			}
+			if !errors.Is(err, cause) {
+				t.Fatalf("assertion failed: errors.Is(err, cause)")
+			}
 		})
 	}
 }
@@ -63,8 +68,12 @@ func Test_AutoSyncClassifiesAuthorFailure(t *testing.T) {
 	}
 
 	err := AutoSync(slog.Default(), cfg)
-	assert.Equal(t, SyncErrorStage(err), syncStageAuthor)
-	assert.Assert(t, errors.Is(err, errNoGitAuthorEmail))
+	if SyncErrorStage(err) != syncStageAuthor {
+		t.Fatalf("got %v, want %v", SyncErrorStage(err), syncStageAuthor)
+	}
+	if !errors.Is(err, errNoGitAuthorEmail) {
+		t.Fatalf("assertion failed: errors.Is(err, errNoGitAuthorEmail)")
+	}
 }
 
 // @description    Verifies fetch-stage classification from AutoSync.
@@ -77,16 +86,26 @@ func Test_AutoSyncClassifiesAuthorFailure(t *testing.T) {
 // @param           t   "test handle used to prepare the fixture and assert the returned error"
 func Test_AutoSyncClassifiesFetchFailure(t *testing.T) {
 	cfg := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
-	assert.NilError(t, exec.Command("git", "-C", cfg.RepoPath, "config", "branch.master.remote", "origin1").Run())
-	assert.NilError(t, exec.Command("git", "-C", cfg.RepoPath, "config", "branch.master.merge", "refs/heads/master").Run())
+	if err := exec.Command("git", "-C", cfg.RepoPath, "config", "branch.master.remote", "origin1").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", cfg.RepoPath, "config", "branch.master.merge", "refs/heads/master").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	missingRemote := filepath.Join(t.TempDir(), "missing.git")
 	cmd := exec.Command("git", "-C", cfg.RepoPath, "remote", "set-url", "origin1", missingRemote)
-	assert.NilError(t, cmd.Run())
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err := AutoSync(slog.Default(), cfg)
-	assert.Equal(t, SyncErrorStage(err), syncStageFetch)
-	assert.Assert(t, IsRemoteSyncError(err))
+	if SyncErrorStage(err) != syncStageFetch {
+		t.Fatalf("got %v, want %v", SyncErrorStage(err), syncStageFetch)
+	}
+	if !IsRemoteSyncError(err) {
+		t.Fatalf("assertion failed: IsRemoteSyncError(err)")
+	}
 }
 
 // @description    Verifies a repo-state pause reports its real stage when the alert cannot fire.
@@ -102,8 +121,12 @@ func Test_AutoSync_RepoStatePauseStage(t *testing.T) {
 	cfg := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
 
 	err := AutoSync(slog.Default(), cfg)
-	assert.Equal(t, SyncErrorStage(err), "no-upstream")
-	assert.Assert(t, errors.Is(err, errNoUpstream))
+	if SyncErrorStage(err) != "no-upstream" {
+		t.Fatalf("got %v, want %v", SyncErrorStage(err), "no-upstream")
+	}
+	if !errors.Is(err, errNoUpstream) {
+		t.Fatalf("assertion failed: errors.Is(err, errNoUpstream)")
+	}
 }
 
 // @description    Verifies an already-reported unavailable notifier does not add duplicate sync warnings.
@@ -119,7 +142,13 @@ func Test_AutoSyncUnavailableAlertDoesNotRepeatWarning(t *testing.T) {
 	cfg := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
 
 	err := AutoSync(logger, cfg)
-	assert.Equal(t, SyncErrorStage(err), "no-upstream")
-	assert.Assert(t, errors.Is(err, errNoUpstream))
-	assert.Assert(t, !strings.Contains(logs.String(), "send repo state alert failed"), logs.String())
+	if SyncErrorStage(err) != "no-upstream" {
+		t.Fatalf("got %v, want %v", SyncErrorStage(err), "no-upstream")
+	}
+	if !errors.Is(err, errNoUpstream) {
+		t.Fatalf("assertion failed: errors.Is(err, errNoUpstream)")
+	}
+	if strings.Contains(logs.String(), "send repo state alert failed") {
+		t.Fatalf("assertion failed: !strings.Contains(logs.String(), \"send repo state alert failed\")")
+	}
 }

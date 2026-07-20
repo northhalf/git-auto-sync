@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -9,7 +10,6 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/logging"
-	"gotest.tools/v3/assert"
 )
 
 // fakeStartCall records one invocation of the manager's start function.
@@ -93,41 +93,75 @@ func Test_WatcherManagerReconcile(t *testing.T) {
 
 	// Initial reconcile starts /a and /b.
 	mgr.reconcile([]string{"/a", "/b"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 2)
-	assert.Equal(t, fs.started[0].repo, "/a")
-	assert.Equal(t, fs.started[1].repo, "/b")
-	assert.DeepEqual(t, fs.started[0].envs, []string{"K=V"})
+	if len(fs.started) != 2 {
+		t.Fatalf("got %v, want %v", len(fs.started), 2)
+	}
+	if fs.started[0].repo != "/a" {
+		t.Fatalf("got %v, want %v", fs.started[0].repo, "/a")
+	}
+	if fs.started[1].repo != "/b" {
+		t.Fatalf("got %v, want %v", fs.started[1].repo, "/b")
+	}
+	if !reflect.DeepEqual(fs.started[0].envs, []string{"K=V"}) {
+		t.Fatalf("got %#v, want %#v", fs.started[0].envs, []string{"K=V"})
+	}
 
 	// Reconciling the same set starts nothing new and cancels nothing.
 	mgr.reconcile([]string{"/a", "/b"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 2)
-	assert.Assert(t, !fs.exited("/a"))
-	assert.Assert(t, !fs.exited("/b"))
+	if len(fs.started) != 2 {
+		t.Fatalf("got %v, want %v", len(fs.started), 2)
+	}
+	if fs.exited("/a") {
+		t.Fatalf("assertion failed: !fs.exited(\"/a\")")
+	}
+	if fs.exited("/b") {
+		t.Fatalf("assertion failed: !fs.exited(\"/b\")")
+	}
 
 	// /b is removed from the config: reconcile cancels its watcher without restarting anything.
 	mgr.reconcile([]string{"/a"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 2)
-	assert.Assert(t, fs.exited("/b"))
-	assert.Assert(t, !fs.exited("/a"))
+	if len(fs.started) != 2 {
+		t.Fatalf("got %v, want %v", len(fs.started), 2)
+	}
+	if !fs.exited("/b") {
+		t.Fatalf("assertion failed: fs.exited(\"/b\")")
+	}
+	if fs.exited("/a") {
+		t.Fatalf("assertion failed: !fs.exited(\"/a\")")
+	}
 
 	// The canceled /b handle is cleaned up on the next pass.
 	mgr.reconcile([]string{"/a"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 2)
+	if len(fs.started) != 2 {
+		t.Fatalf("got %v, want %v", len(fs.started), 2)
+	}
 
 	// Re-adding /b starts a fresh watcher.
 	mgr.reconcile([]string{"/a", "/b"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 3)
-	assert.Equal(t, fs.started[2].repo, "/b")
+	if len(fs.started) != 3 {
+		t.Fatalf("got %v, want %v", len(fs.started), 3)
+	}
+	if fs.started[2].repo != "/b" {
+		t.Fatalf("got %v, want %v", fs.started[2].repo, "/b")
+	}
 
 	// /a removed from the config: reconcile cancels it; /b keeps running.
 	mgr.reconcile([]string{"/b"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 3)
-	assert.Assert(t, fs.exited("/a"))
-	assert.Assert(t, !fs.exited("/b"))
+	if len(fs.started) != 3 {
+		t.Fatalf("got %v, want %v", len(fs.started), 3)
+	}
+	if !fs.exited("/a") {
+		t.Fatalf("assertion failed: fs.exited(\"/a\")")
+	}
+	if fs.exited("/b") {
+		t.Fatalf("assertion failed: !fs.exited(\"/b\")")
+	}
 
 	// Next pass cleans /a up; nothing is started.
 	mgr.reconcile([]string{"/b"}, []string{"K=V"})
-	assert.Equal(t, len(fs.started), 3)
+	if len(fs.started) != 3 {
+		t.Fatalf("got %v, want %v", len(fs.started), 3)
+	}
 }
 
 // @description    Verifies RestartAll cancels every handle and clears the map.
@@ -156,7 +190,9 @@ func Test_RestartAll(t *testing.T) {
 
 	mgr.RestartAll()
 
-	assert.Assert(t, len(mgr.watchers) == 0)
+	if len(mgr.watchers) != 0 {
+		t.Fatalf("assertion failed: len(mgr.watchers) == 0")
+	}
 	for _, h := range tracks {
 		select {
 		case <-h.done:
@@ -181,7 +217,9 @@ func Test_WatchForLocalChange(t *testing.T) {
 
 	repoPath := t.TempDir()
 	repo, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	canceled := make(chan struct{}, 1)
@@ -189,9 +227,13 @@ func Test_WatchForLocalChange(t *testing.T) {
 
 	// Write an unrelated .git/config change (a new [remote] section). Must not cancel.
 	cfg, err := repo.Config()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	cfg.Raw.Section("remote").Subsection("origin").SetOption("url", "https://example.com/repo")
-	assert.NilError(t, repo.SetConfig(cfg))
+	if err := repo.SetConfig(cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Wait past a poll interval; expect no cancel from the unrelated change.
 	select {
@@ -201,7 +243,9 @@ func Test_WatchForLocalChange(t *testing.T) {
 	}
 
 	// Write an [auto-sync] change. Expect cancel.
-	assert.NilError(t, config.SetLocalSetting(repoPath, "syncInterval", "33"))
+	if err := config.SetLocalSetting(repoPath, "syncInterval", "33"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	select {
 	case <-canceled:
 		// expected

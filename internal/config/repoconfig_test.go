@@ -5,7 +5,6 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Writes global settings into an isolated config directory for the test.
@@ -20,7 +19,9 @@ func withGlobal(t *testing.T, s *Settings) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
-	assert.NilError(t, WriteGlobalSettings(s))
+	if err := WriteGlobalSettings(s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 // @description    Verifies the default debounce duration.
@@ -33,13 +34,23 @@ func Test_NewRepoConfigDefaultDebounce(t *testing.T) {
 	withGlobal(t, &Settings{})
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	cfg, err := NewRepoConfig(repoPath)
-	assert.NilError(t, err)
-	assert.Equal(t, cfg.Debounce, 10*time.Minute)
-	assert.Equal(t, cfg.SyncInterval, 60*time.Minute)
-	assert.Equal(t, cfg.GitExec, "git")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Debounce != 10*time.Minute {
+		t.Fatalf("got %v, want %v", cfg.Debounce, 10*time.Minute)
+	}
+	if cfg.SyncInterval != 60*time.Minute {
+		t.Fatalf("got %v, want %v", cfg.SyncInterval, 60*time.Minute)
+	}
+	if cfg.GitExec != "git" {
+		t.Fatalf("got %v, want %v", cfg.GitExec, "git")
+	}
 }
 
 // @description    Verifies global settings apply when local is unset.
@@ -53,11 +64,17 @@ func Test_NewRepoConfigGlobal(t *testing.T) {
 	withGlobal(t, &Settings{SyncInterval: &sixty})
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	cfg, err := NewRepoConfig(repoPath)
-	assert.NilError(t, err)
-	assert.Equal(t, cfg.SyncInterval, 120*time.Minute)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SyncInterval != 120*time.Minute {
+		t.Fatalf("got %v, want %v", cfg.SyncInterval, 120*time.Minute)
+	}
 }
 
 // @description    Verifies local settings override global.
@@ -71,12 +88,20 @@ func Test_NewRepoConfigLocalOverridesGlobal(t *testing.T) {
 	withGlobal(t, &Settings{SyncInterval: &g})
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
-	assert.NilError(t, SetLocalSetting(repoPath, "syncInterval", "30"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := SetLocalSetting(repoPath, "syncInterval", "30"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	cfg, err := NewRepoConfig(repoPath)
-	assert.NilError(t, err)
-	assert.Equal(t, cfg.SyncInterval, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SyncInterval != 30*time.Minute {
+		t.Fatalf("got %v, want %v", cfg.SyncInterval, 30*time.Minute)
+	}
 }
 
 // @description    Verifies an explicit nonexistent gitexec errors.
@@ -89,9 +114,15 @@ func Test_NewRepoConfigGitExecMissing(t *testing.T) {
 	withGlobal(t, &Settings{})
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
-	assert.NilError(t, SetLocalSetting(repoPath, "gitexec", "/does/not/exist/git"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := SetLocalSetting(repoPath, "gitexec", "/does/not/exist/git"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	_, err = NewRepoConfig(repoPath)
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }

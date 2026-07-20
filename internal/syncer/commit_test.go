@@ -10,8 +10,6 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-
-	"gotest.tools/v3/assert"
 )
 
 // @description    Prepares a repository test fixture.
@@ -26,17 +24,25 @@ import (
 // @return          config.RepoConfig   "configuration for the copied temporary repository"
 func PrepareFixture(t *testing.T, name string) config.RepoConfig {
 	newRepoPath, err := os.MkdirTemp(os.TempDir(), name)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	fixturePath := filepath.Join("testdata", name)
 	err = os.CopyFS(newRepoPath, os.DirFS(fixturePath))
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err = os.Rename(filepath.Join(newRepoPath, ".gitted"), filepath.Join(newRepoPath, ".git"))
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	repoConfig, err := config.NewRepoConfig(newRepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	return repoConfig
 }
@@ -51,15 +57,23 @@ func Test_NoChanges(t *testing.T) {
 	repoConfig := PrepareFixture(t, "no_changes")
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+	if head.Hash() != plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57") {
+		t.Fatalf("got %v, want %v", head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+	}
 }
 
 // @description    Checks the repository HEAD commit.
@@ -76,20 +90,34 @@ func Test_NoChanges(t *testing.T) {
 // @param           msg        "expected message of the HEAD commit"
 func HasHeadCommit(t *testing.T, repoPath string, hash string, msg string) {
 	r, err := git.PlainOpen(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Assert(t, head.Hash() != plumbing.NewHash(hash))
+	if head.Hash() == plumbing.NewHash(hash) {
+		t.Fatalf("assertion failed: head.Hash() != plumbing.NewHash(hash)")
+	}
 
 	commit, err := r.CommitObject(head.Hash())
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	parent, err := commit.Parent(0)
-	assert.NilError(t, err)
-	assert.Equal(t, parent.ID(), plumbing.NewHash(hash))
-	assert.Equal(t, commit.Message, msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if parent.ID() != plumbing.NewHash(hash) {
+		t.Fatalf("got %v, want %v", parent.ID(), plumbing.NewHash(hash))
+	}
+	if commit.Message != msg {
+		t.Fatalf("got %v, want %v", commit.Message, msg)
+	}
 }
 
 // @description    Verifies that LFS-tracked files matching their pointer are not committed.
@@ -102,15 +130,23 @@ func Test_LFSNoChanges(t *testing.T) {
 	repoConfig := PrepareFixture(t, "lfs_no_changes")
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Equal(t, head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
+	if head.Hash() != plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe") {
+		t.Fatalf("got %v, want %v", head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
+	}
 }
 
 // @description    Verifies that an LFS pointer left in the working tree is not committed.
@@ -127,17 +163,29 @@ func Test_LFSPointerInWorktree(t *testing.T) {
 	// Replace the smudged binary with the pointer text stored in the index, mirroring a working
 	// tree populated by an LFS-less checkout.
 	pointer, err := exec.Command("git", "-C", repoConfig.RepoPath, "cat-file", "-p", ":image.bin").Output()
-	assert.NilError(t, err)
-	assert.NilError(t, os.WriteFile(filepath.Join(repoConfig.RepoPath, "image.bin"), pointer, 0o644))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoConfig.RepoPath, "image.bin"), pointer, 0o644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err = commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	head, err := r.Head()
-	assert.NilError(t, err)
-	assert.Equal(t, head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if head.Hash() != plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe") {
+		t.Fatalf("got %v, want %v", head.Hash(), plumbing.NewHash("3817fd1942f3ab9960a0baeb3503cfbcb7f6e1fe"))
+	}
 }
 
 // @description    Verifies commits for untracked files.
@@ -150,7 +198,9 @@ func Test_NewFile(t *testing.T) {
 	repoConfig := PrepareFixture(t, "new_file")
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	HasHeadCommit(t, repoConfig.RepoPath, "28cc969d97ddb7640f5e1428bbc8f2947d1ffd57", "?? 2.md\n")
 }
@@ -165,7 +215,9 @@ func Test_OneFileChange(t *testing.T) {
 	repoConfig := PrepareFixture(t, "one_file_change")
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	HasHeadCommit(t, repoConfig.RepoPath, "28cc969d97ddb7640f5e1428bbc8f2947d1ffd57", " M 1.md\n")
 }
@@ -180,15 +232,23 @@ func Test_VimSwapFile(t *testing.T) {
 	repoConfig := PrepareFixture(t, "vim_swap_file")
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+	if head.Hash() != plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57") {
+		t.Fatalf("got %v, want %v", head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+	}
 }
 
 // @description    Verifies that nested Git repositories are not committed as gitlinks.
@@ -203,27 +263,45 @@ func Test_NestedGitRepositorySkipped(t *testing.T) {
 
 	// Create a linked worktree inside the repository, mirroring .claude/worktrees/.
 	worktreeCmd := exec.Command("git", "-C", repoConfig.RepoPath, "worktree", "add", "--detach", ".claude/worktrees/feat")
-	assert.NilError(t, worktreeCmd.Run())
+	if err := worktreeCmd.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Add a legitimate untracked file in the parent worktree.
-	assert.NilError(t, os.WriteFile(filepath.Join(repoConfig.RepoPath, "real.md"), []byte("real"), 0o644))
+	if err := os.WriteFile(filepath.Join(repoConfig.RepoPath, "real.md"), []byte("real"), 0o644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// The legitimate file must be committed with its status line as the message.
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	c, err := r.CommitObject(head.Hash())
-	assert.NilError(t, err)
-	assert.Equal(t, c.Message, "?? real.md\n")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Message != "?? real.md\n" {
+		t.Fatalf("got %v, want %v", c.Message, "?? real.md\n")
+	}
 
 	// The linked worktree must NOT be tracked as an embedded gitlink.
 	tracked, err := exec.Command("git", "-C", repoConfig.RepoPath, "ls-files", ".claude/worktrees/feat").Output()
-	assert.NilError(t, err)
-	assert.Equal(t, string(tracked), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(tracked) != "" {
+		t.Fatalf("got %v, want %v", string(tracked), "")
+	}
 }
 
 // @description    Verifies that non-ASCII filenames are committed with raw UTF-8 bytes.
@@ -237,23 +315,39 @@ func Test_NestedGitRepositorySkipped(t *testing.T) {
 func Test_NonASCIIFilename(t *testing.T) {
 	repoConfig := PrepareFixture(t, "no_changes")
 
-	assert.NilError(t, os.WriteFile(filepath.Join(repoConfig.RepoPath, "新建 文档.md"), []byte("content"), 0o644))
+	if err := os.WriteFile(filepath.Join(repoConfig.RepoPath, "新建 文档.md"), []byte("content"), 0o644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	c, err := r.CommitObject(head.Hash())
-	assert.NilError(t, err)
-	assert.Equal(t, c.Message, "?? 新建 文档.md\n")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Message != "?? 新建 文档.md\n" {
+		t.Fatalf("got %v, want %v", c.Message, "?? 新建 文档.md\n")
+	}
 
 	// The file must be tracked under its raw UTF-8 path.
 	tracked, err := exec.Command("git", "-C", repoConfig.RepoPath, "-c", "core.quotePath=false", "ls-files", "-z", "--", "新建 文档.md").Output()
-	assert.NilError(t, err)
-	assert.Equal(t, string(tracked), "新建 文档.md\x00")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(tracked) != "新建 文档.md\x00" {
+		t.Fatalf("got %v, want %v", string(tracked), "新建 文档.md\x00")
+	}
 }
 
 // @description    Verifies commits for multiple file changes.
@@ -266,7 +360,9 @@ func Test_MultipleFileChange(t *testing.T) {
 	repoConfig := PrepareFixture(t, "multiple_file_change")
 
 	err := commit(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	HasHeadCommit(t, repoConfig.RepoPath, "7058b6b292ee3d1382670334b5f29570a1117ef1", ` D dirA/2.md
  M 1.md

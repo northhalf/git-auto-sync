@@ -1,10 +1,9 @@
 package daemonstate
 
 import (
+	"reflect"
 	"testing"
 	"time"
-
-	"gotest.tools/v3/assert"
 )
 
 // setupState points XDG_CONFIG_HOME and HOME at a temporary directory so StateFile, ReadState, and
@@ -26,9 +25,15 @@ func Test_StateReadEmpty(t *testing.T) {
 	setupState(t)
 
 	state, err := ReadState()
-	assert.NilError(t, err)
-	assert.Assert(t, state != nil)
-	assert.Assert(t, len(state.Repos) == 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state == nil {
+		t.Fatalf("assertion failed: state != nil")
+	}
+	if len(state.Repos) != 0 {
+		t.Fatalf("assertion failed: len(state.Repos) == 0")
+	}
 }
 
 // @description    Verifies the state file modification time.
@@ -41,14 +46,24 @@ func Test_StateModTime(t *testing.T) {
 	setupState(t)
 
 	mod, err := StateModTime()
-	assert.NilError(t, err)
-	assert.Assert(t, mod.IsZero(), "expected zero mod time when state file is absent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mod.IsZero() {
+		t.Fatalf("assertion failed: mod.IsZero()")
+	}
 
-	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{{Repo: "/repo", Status: StatusRunning}}}))
+	if err := WriteState(&State{Repos: []RepoStatus{{Repo: "/repo", Status: StatusRunning}}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	mod, err = StateModTime()
-	assert.NilError(t, err)
-	assert.Assert(t, !mod.IsZero(), "expected non-zero mod time after writing state")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mod.IsZero() {
+		t.Fatalf("assertion failed: !mod.IsZero()")
+	}
 }
 
 // @description    Verifies state round-trips through the file.
@@ -63,11 +78,17 @@ func Test_StateRoundTrip(t *testing.T) {
 		{Repo: "/repo/a", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0), LastSyncedAt: time.Unix(1500, 0)},
 		{Repo: "/repo/b", Status: StatusPaused, Stage: "rebase", UpdatedAt: time.Unix(2000, 0)},
 	}}
-	assert.NilError(t, WriteState(want))
+	if err := WriteState(want); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	got, err := ReadState()
-	assert.NilError(t, err)
-	assert.DeepEqual(t, got, want)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
 }
 
 // @description    Verifies WriteState sorts repositories by path.
@@ -79,18 +100,30 @@ func Test_StateRoundTrip(t *testing.T) {
 func Test_WriteStateSortsRepos(t *testing.T) {
 	setupState(t)
 
-	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+	if err := WriteState(&State{Repos: []RepoStatus{
 		{Repo: "/z", Status: StatusRunning},
 		{Repo: "/a", Status: StatusRunning},
 		{Repo: "/m", Status: StatusRunning},
-	}}))
+	}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	got, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(got.Repos), 3)
-	assert.Equal(t, got.Repos[0].Repo, "/a")
-	assert.Equal(t, got.Repos[1].Repo, "/m")
-	assert.Equal(t, got.Repos[2].Repo, "/z")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Repos) != 3 {
+		t.Fatalf("got %v, want %v", len(got.Repos), 3)
+	}
+	if got.Repos[0].Repo != "/a" {
+		t.Fatalf("got %v, want %v", got.Repos[0].Repo, "/a")
+	}
+	if got.Repos[1].Repo != "/m" {
+		t.Fatalf("got %v, want %v", got.Repos[1].Repo, "/m")
+	}
+	if got.Repos[2].Repo != "/z" {
+		t.Fatalf("got %v, want %v", got.Repos[2].Repo, "/z")
+	}
 }
 
 // @description    Verifies WriteState overwrites existing content.
@@ -102,18 +135,30 @@ func Test_WriteStateSortsRepos(t *testing.T) {
 func Test_WriteStateOverwrites(t *testing.T) {
 	setupState(t)
 
-	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+	if err := WriteState(&State{Repos: []RepoStatus{
 		{Repo: "/old", Status: StatusRunning},
-	}}))
-	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+	}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := WriteState(&State{Repos: []RepoStatus{
 		{Repo: "/new", Status: StatusPaused, Stage: "author"},
-	}}))
+	}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	got, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(got.Repos), 1)
-	assert.Equal(t, got.Repos[0].Repo, "/new")
-	assert.Equal(t, got.Repos[0].Stage, "author")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(got.Repos), 1)
+	}
+	if got.Repos[0].Repo != "/new" {
+		t.Fatalf("got %v, want %v", got.Repos[0].Repo, "/new")
+	}
+	if got.Repos[0].Stage != "author" {
+		t.Fatalf("got %v, want %v", got.Repos[0].Stage, "author")
+	}
 }
 
 // @description    Verifies Recorder.Set persists and deduplicates.
@@ -129,25 +174,43 @@ func Test_RecorderSetPersistsAndDedupes(t *testing.T) {
 
 	r.Set("/repo", StatusRunning, "", time.Time{})
 	first, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(first.Repos), 1)
-	assert.Equal(t, first.Repos[0].Status, StatusRunning)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(first.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(first.Repos), 1)
+	}
+	if first.Repos[0].Status != StatusRunning {
+		t.Fatalf("got %v, want %v", first.Repos[0].Status, StatusRunning)
+	}
 	firstUpdated := first.Repos[0].UpdatedAt
 
 	// An identical report must not refresh UpdatedAt.
 	time.Sleep(10 * time.Millisecond)
 	r.Set("/repo", StatusRunning, "", time.Time{})
 	second, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, second.Repos[0].UpdatedAt, firstUpdated)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if second.Repos[0].UpdatedAt != firstUpdated {
+		t.Fatalf("got %v, want %v", second.Repos[0].UpdatedAt, firstUpdated)
+	}
 
 	// A changed status updates the entry and refreshes UpdatedAt.
 	r.Set("/repo", StatusPaused, "rebase", time.Time{})
 	third, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, third.Repos[0].Status, StatusPaused)
-	assert.Equal(t, third.Repos[0].Stage, "rebase")
-	assert.Assert(t, third.Repos[0].UpdatedAt.After(firstUpdated))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if third.Repos[0].Status != StatusPaused {
+		t.Fatalf("got %v, want %v", third.Repos[0].Status, StatusPaused)
+	}
+	if third.Repos[0].Stage != "rebase" {
+		t.Fatalf("got %v, want %v", third.Repos[0].Stage, "rebase")
+	}
+	if !third.Repos[0].UpdatedAt.After(firstUpdated) {
+		t.Fatalf("assertion failed: third.Repos[0].UpdatedAt.After(firstUpdated)")
+	}
 }
 
 // @description    Verifies Recorder.Heartbeat refreshes every entry.
@@ -163,18 +226,28 @@ func Test_RecorderHeartbeat(t *testing.T) {
 	r := NewRecorder()
 	r.Heartbeat()
 	mod, err := StateModTime()
-	assert.NilError(t, err)
-	assert.Assert(t, mod.IsZero(), "Heartbeat with no repos should not write a state file")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mod.IsZero() {
+		t.Fatalf("assertion failed: mod.IsZero()")
+	}
 
 	r.Set("/repo", StatusRunning, "", time.Time{})
 	before, err := ReadState()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	time.Sleep(10 * time.Millisecond)
 	r.Heartbeat()
 	after, err := ReadState()
-	assert.NilError(t, err)
-	assert.Assert(t, after.Repos[0].UpdatedAt.After(before.Repos[0].UpdatedAt))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !after.Repos[0].UpdatedAt.After(before.Repos[0].UpdatedAt) {
+		t.Fatalf("assertion failed: after.Repos[0].UpdatedAt.After(before.Repos[0].UpdatedAt)")
+	}
 }
 
 // @description    Verifies Recorder.Remove deletes an entry.
@@ -191,15 +264,25 @@ func Test_RecorderRemove(t *testing.T) {
 
 	r.Remove("/repo/a")
 	got, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(got.Repos), 1)
-	assert.Equal(t, got.Repos[0].Repo, "/repo/b")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(got.Repos), 1)
+	}
+	if got.Repos[0].Repo != "/repo/b" {
+		t.Fatalf("got %v, want %v", got.Repos[0].Repo, "/repo/b")
+	}
 
 	// Removing an unknown repository is a no-op.
 	r.Remove("/repo/missing")
 	got, err = ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(got.Repos), 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(got.Repos), 1)
+	}
 }
 
 // @description    Verifies Recorder.Remove deletes state not loaded into runtime memory.
@@ -211,18 +294,26 @@ func Test_RecorderRemove(t *testing.T) {
 // @param           t  "test handle used for isolated setup and assertions"
 func Test_RecorderRemovePersistedOnly(t *testing.T) {
 	setupState(t)
-	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+	if err := WriteState(&State{Repos: []RepoStatus{
 		{Repo: "/repo", Status: StatusRunning, LastSyncedAt: time.Unix(5000, 0)},
 		{Repo: "/other", Status: StatusPaused, Stage: "commit", LastSyncedAt: time.Unix(4000, 0)},
-	}}))
+	}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r := NewRecorder()
 	r.Remove("/repo")
 
 	got, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, len(got.Repos), 1)
-	assert.Equal(t, got.Repos[0].Repo, "/other")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Repos) != 1 {
+		t.Fatalf("got %v, want %v", len(got.Repos), 1)
+	}
+	if got.Repos[0].Repo != "/other" {
+		t.Fatalf("got %v, want %v", got.Repos[0].Repo, "/other")
+	}
 }
 
 // @description    Verifies Recorder.Set dedup covers LastSyncedAt.
@@ -239,24 +330,36 @@ func Test_RecorderSetDedupesLastSynced(t *testing.T) {
 	first := time.Unix(1000, 0)
 	r.Set("/repo", StatusRunning, "", first)
 	got, err := ReadState()
-	assert.NilError(t, err)
-	// Compare instants with Time.Equal, not assert.Equal: got.LastSyncedAt round-trips through
-	// state.json and carries the UTC location, while first carries time.Local, and assert.Equal
-	// uses == (Location pointer comparison), which flakes under TZ=UTC.
-	assert.Assert(t, got.Repos[0].LastSyncedAt.Equal(first))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Compare instants with Time.Equal, not ==: got.LastSyncedAt round-trips through state.json
+	// and carries the UTC location, while first carries time.Local, and == compares the Location
+	// pointer, which flakes under TZ=UTC.
+	if !got.Repos[0].LastSyncedAt.Equal(first) {
+		t.Fatalf("assertion failed: got.Repos[0].LastSyncedAt.Equal(first)")
+	}
 
 	// A newer LastSyncedAt with identical status and stage writes.
 	second := time.Unix(2000, 0)
 	r.Set("/repo", StatusRunning, "", second)
 	got, err = ReadState()
-	assert.NilError(t, err)
-	assert.Assert(t, got.Repos[0].LastSyncedAt.Equal(second))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.Repos[0].LastSyncedAt.Equal(second) {
+		t.Fatalf("assertion failed: got.Repos[0].LastSyncedAt.Equal(second)")
+	}
 
 	// The same LastSyncedAt is a no-op: LastSyncedAt is unchanged and the on-disk value stays second.
 	r.Set("/repo", StatusRunning, "", second)
 	got, err = ReadState()
-	assert.NilError(t, err)
-	assert.Assert(t, got.Repos[0].LastSyncedAt.Equal(second))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.Repos[0].LastSyncedAt.Equal(second) {
+		t.Fatalf("assertion failed: got.Repos[0].LastSyncedAt.Equal(second)")
+	}
 }
 
 // @description    Verifies persistLocked preserves a newer on-disk LastSyncedAt.
@@ -274,16 +377,22 @@ func Test_RecorderPreservesDiskLastSynced(t *testing.T) {
 	r.Set("/repo", StatusRunning, "", time.Unix(1000, 0))
 
 	// A separate process (the CLI) writes a newer LastSyncedAt directly to state.json.
-	assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+	if err := WriteState(&State{Repos: []RepoStatus{
 		{Repo: "/repo", Status: StatusRunning, UpdatedAt: time.Unix(1500, 0), LastSyncedAt: time.Unix(5000, 0)},
-	}}))
+	}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// The daemon persists again (e.g. heartbeat-driven Set with zero lastSynced). The newer on-disk
 	// LastSyncedAt must survive.
 	r.Set("/repo", StatusRunning, "", time.Time{})
 	got, err := ReadState()
-	assert.NilError(t, err)
-	assert.Equal(t, got.Repos[0].LastSyncedAt.Unix(), int64(5000))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Repos[0].LastSyncedAt.Unix() != int64(5000) {
+		t.Fatalf("got %v, want %v", got.Repos[0].LastSyncedAt.Unix(), int64(5000))
+	}
 }
 
 // @description    Verifies RecordSyncSuccess merges LastSyncedAt into state.json.
@@ -296,42 +405,80 @@ func Test_RecorderPreservesDiskLastSynced(t *testing.T) {
 func Test_RecordSyncSuccess(t *testing.T) {
 	t.Run("existing entry preserves runtime fields", func(t *testing.T) {
 		setupState(t)
-		assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+		if err := WriteState(&State{Repos: []RepoStatus{
 			{Repo: "/repo", Status: StatusPaused, Stage: "rebase", UpdatedAt: time.Unix(1000, 0)},
-		}}))
+		}}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		assert.NilError(t, RecordSyncSuccess("/repo"))
+		if err := RecordSyncSuccess("/repo"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		got, err := ReadState()
-		assert.NilError(t, err)
-		assert.Equal(t, len(got.Repos), 1)
-		assert.Equal(t, got.Repos[0].Status, StatusPaused)
-		assert.Equal(t, got.Repos[0].Stage, "rebase")
-		assert.Equal(t, got.Repos[0].UpdatedAt.Unix(), int64(1000))
-		assert.Assert(t, !got.Repos[0].LastSyncedAt.IsZero(), "LastSyncedAt should be set")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got.Repos) != 1 {
+			t.Fatalf("got %v, want %v", len(got.Repos), 1)
+		}
+		if got.Repos[0].Status != StatusPaused {
+			t.Fatalf("got %v, want %v", got.Repos[0].Status, StatusPaused)
+		}
+		if got.Repos[0].Stage != "rebase" {
+			t.Fatalf("got %v, want %v", got.Repos[0].Stage, "rebase")
+		}
+		if got.Repos[0].UpdatedAt.Unix() != int64(1000) {
+			t.Fatalf("got %v, want %v", got.Repos[0].UpdatedAt.Unix(), int64(1000))
+		}
+		if got.Repos[0].LastSyncedAt.IsZero() {
+			t.Fatalf("assertion failed: !got.Repos[0].LastSyncedAt.IsZero()")
+		}
 	})
 
 	t.Run("missing entry creates running entry", func(t *testing.T) {
 		setupState(t)
-		assert.NilError(t, WriteState(&State{Repos: []RepoStatus{
+		if err := WriteState(&State{Repos: []RepoStatus{
 			{Repo: "/other", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0)},
-		}}))
+		}}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		assert.NilError(t, RecordSyncSuccess("/repo"))
+		if err := RecordSyncSuccess("/repo"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		got, err := ReadState()
-		assert.NilError(t, err)
-		assert.Equal(t, len(got.Repos), 2)
-		assert.Equal(t, got.Repos[1].Repo, "/repo")
-		assert.Equal(t, got.Repos[1].Status, StatusRunning)
-		assert.Assert(t, !got.Repos[1].LastSyncedAt.IsZero(), "LastSyncedAt should be set")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got.Repos) != 2 {
+			t.Fatalf("got %v, want %v", len(got.Repos), 2)
+		}
+		if got.Repos[1].Repo != "/repo" {
+			t.Fatalf("got %v, want %v", got.Repos[1].Repo, "/repo")
+		}
+		if got.Repos[1].Status != StatusRunning {
+			t.Fatalf("got %v, want %v", got.Repos[1].Status, StatusRunning)
+		}
+		if got.Repos[1].LastSyncedAt.IsZero() {
+			t.Fatalf("assertion failed: !got.Repos[1].LastSyncedAt.IsZero()")
+		}
 	})
 
 	t.Run("no state file", func(t *testing.T) {
 		setupState(t)
-		assert.NilError(t, RecordSyncSuccess("/repo"))
+		if err := RecordSyncSuccess("/repo"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		got, err := ReadState()
-		assert.NilError(t, err)
-		assert.Equal(t, len(got.Repos), 1)
-		assert.Assert(t, !got.Repos[0].LastSyncedAt.IsZero(), "LastSyncedAt should be set")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got.Repos) != 1 {
+			t.Fatalf("got %v, want %v", len(got.Repos), 1)
+		}
+		if got.Repos[0].LastSyncedAt.IsZero() {
+			t.Fatalf("assertion failed: !got.Repos[0].LastSyncedAt.IsZero()")
+		}
 	})
 }
 
@@ -344,7 +491,13 @@ func Test_RecordSyncSuccess(t *testing.T) {
 func Test_RepoStatusIsStale(t *testing.T) {
 	now := time.Unix(10_000, 0)
 
-	assert.Assert(t, !RepoStatus{UpdatedAt: now}.IsStale(now), "current entry should not be stale")
-	assert.Assert(t, RepoStatus{UpdatedAt: now.Add(-(StaleThreshold + time.Second))}.IsStale(now), "old entry should be stale")
-	assert.Assert(t, RepoStatus{}.IsStale(now), "zero UpdatedAt should be stale")
+	if (RepoStatus{UpdatedAt: now}).IsStale(now) {
+		t.Fatalf("assertion failed: !RepoStatus{UpdatedAt: now}.IsStale(now)")
+	}
+	if !(RepoStatus{UpdatedAt: now.Add(-(StaleThreshold + time.Second))}).IsStale(now) {
+		t.Fatalf("assertion failed: RepoStatus{UpdatedAt: now.Add(-(StaleThreshold + time.Second))}.IsStale(now)")
+	}
+	if !(RepoStatus{}).IsStale(now) {
+		t.Fatalf("assertion failed: RepoStatus{}.IsStale(now)")
+	}
 }

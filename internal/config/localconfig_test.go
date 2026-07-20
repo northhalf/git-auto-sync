@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Verifies local settings set, read, and unset round trip.
@@ -16,29 +15,63 @@ import (
 func Test_LocalSettingsRoundTrip(t *testing.T) {
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.NilError(t, SetLocalSetting(repoPath, "syncInterval", "30"))
-	assert.NilError(t, SetLocalSetting(repoPath, "debounce", "5"))
-	assert.NilError(t, SetLocalSetting(repoPath, "gitexec", "/usr/bin/git"))
+	if err := SetLocalSetting(repoPath, "syncInterval", "30"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := SetLocalSetting(repoPath, "debounce", "5"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := SetLocalSetting(repoPath, "gitexec", "/usr/bin/git"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	local, err := ReadLocalSettings(repoPath)
-	assert.NilError(t, err)
-	assert.Assert(t, local.Repos == nil)
-	assert.Assert(t, local.Envs == nil)
-	assert.Equal(t, *local.SyncInterval, 30)
-	assert.Equal(t, *local.Debounce, 5)
-	assert.Equal(t, *local.GitExec, "/usr/bin/git")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if local.Repos != nil {
+		t.Fatalf("assertion failed: local.Repos == nil")
+	}
+	if local.Envs != nil {
+		t.Fatalf("assertion failed: local.Envs == nil")
+	}
+	if *local.SyncInterval != 30 {
+		t.Fatalf("got %v, want %v", *local.SyncInterval, 30)
+	}
+	if *local.Debounce != 5 {
+		t.Fatalf("got %v, want %v", *local.Debounce, 5)
+	}
+	if *local.GitExec != "/usr/bin/git" {
+		t.Fatalf("got %v, want %v", *local.GitExec, "/usr/bin/git")
+	}
 
-	assert.NilError(t, UnsetLocalSetting(repoPath, "syncInterval"))
-	assert.NilError(t, UnsetLocalSetting(repoPath, "debounce"))
-	assert.NilError(t, UnsetLocalSetting(repoPath, "gitexec"))
+	if err := UnsetLocalSetting(repoPath, "syncInterval"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := UnsetLocalSetting(repoPath, "debounce"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := UnsetLocalSetting(repoPath, "gitexec"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	local, err = ReadLocalSettings(repoPath)
-	assert.NilError(t, err)
-	assert.Assert(t, local.SyncInterval == nil)
-	assert.Assert(t, local.Debounce == nil)
-	assert.Assert(t, local.GitExec == nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if local.SyncInterval != nil {
+		t.Fatalf("assertion failed: local.SyncInterval == nil")
+	}
+	if local.Debounce != nil {
+		t.Fatalf("assertion failed: local.Debounce == nil")
+	}
+	if local.GitExec != nil {
+		t.Fatalf("assertion failed: local.GitExec == nil")
+	}
 }
 
 // @description    Verifies ReadLocalSettings returns nil fields for an unset section.
@@ -50,13 +83,23 @@ func Test_LocalSettingsRoundTrip(t *testing.T) {
 func Test_ReadLocalSettingsEmpty(t *testing.T) {
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	local, err := ReadLocalSettings(repoPath)
-	assert.NilError(t, err)
-	assert.Assert(t, local.SyncInterval == nil)
-	assert.Assert(t, local.Debounce == nil)
-	assert.Assert(t, local.GitExec == nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if local.SyncInterval != nil {
+		t.Fatalf("assertion failed: local.SyncInterval == nil")
+	}
+	if local.Debounce != nil {
+		t.Fatalf("assertion failed: local.Debounce == nil")
+	}
+	if local.GitExec != nil {
+		t.Fatalf("assertion failed: local.GitExec == nil")
+	}
 }
 
 // @description    Verifies SetLocalSetting replaces an existing value.
@@ -67,12 +110,22 @@ func Test_ReadLocalSettingsEmpty(t *testing.T) {
 func Test_SetLocalSettingReplaces(t *testing.T) {
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.NilError(t, SetLocalSetting(repoPath, "syncInterval", "30"))
-	assert.NilError(t, SetLocalSetting(repoPath, "syncInterval", "45"))
+	if err := SetLocalSetting(repoPath, "syncInterval", "30"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := SetLocalSetting(repoPath, "syncInterval", "45"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	local, err := ReadLocalSettings(repoPath)
-	assert.NilError(t, err)
-	assert.Equal(t, *local.SyncInterval, 45)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *local.SyncInterval != 45 {
+		t.Fatalf("got %v, want %v", *local.SyncInterval, 45)
+	}
 }

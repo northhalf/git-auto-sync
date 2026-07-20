@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/northhalf/git-auto-sync/internal/daemonstate"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Verifies the repository status label formatting.
@@ -86,7 +85,9 @@ func Test_RepoStatus(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := repoStatus(tc.repo, tc.state, now)
-			assert.Equal(t, got, tc.want)
+			if got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
 		})
 	}
 }
@@ -149,7 +150,9 @@ func Test_RepoLastSynced(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := repoLastSynced(tc.repo, tc.state, now)
-			assert.Equal(t, got, tc.want)
+			if got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
 		})
 	}
 }
@@ -182,7 +185,9 @@ func Test_FormatLastSynced(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, formatLastSynced(tc.last, now), tc.want)
+			if formatLastSynced(tc.last, now) != tc.want {
+				t.Fatalf("got %v, want %v", formatLastSynced(tc.last, now), tc.want)
+			}
 		})
 	}
 }
@@ -213,7 +218,9 @@ func Test_HumanDuration(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, humanDuration(tc.d), tc.want)
+			if humanDuration(tc.d) != tc.want {
+				t.Fatalf("got %v, want %v", humanDuration(tc.d), tc.want)
+			}
 		})
 	}
 }
@@ -224,9 +231,15 @@ func Test_HumanDuration(t *testing.T) {
 //
 // @param           t  "test handle used for table-driven assertions"
 func Test_PadRight(t *testing.T) {
-	assert.Equal(t, padRight("ab", 5), "ab   ")
-	assert.Equal(t, padRight("abcde", 3), "abcde")
-	assert.Equal(t, padRight("世界", 4), "世界  ")
+	if padRight("ab", 5) != "ab   " {
+		t.Fatalf("got %v, want %v", padRight("ab", 5), "ab   ")
+	}
+	if padRight("abcde", 3) != "abcde" {
+		t.Fatalf("got %v, want %v", padRight("abcde", 3), "abcde")
+	}
+	if padRight("世界", 4) != "世界  " {
+		t.Fatalf("got %v, want %v", padRight("世界", 4), "世界  ")
+	}
 }
 
 // @description    Verifies printRepos aligns columns and omits the sync segment for unknown rows.
@@ -249,21 +262,37 @@ func Test_PrintReposAlignsColumns(t *testing.T) {
 
 	out := buf.String()
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	assert.Equal(t, len(lines), 3)
+	if len(lines) != 3 {
+		t.Fatalf("got %v, want %v", len(lines), 3)
+	}
 
 	// Every row's first "  -  " separator must start at the same column (path column aligned to the
 	// longest path). The unknown row ends after the status column (no second separator).
 	firstSep := strings.Index(lines[0], "  -  ")
-	assert.Equal(t, firstSep, len("/longer-path"))
-	assert.Equal(t, strings.Index(lines[1], "  -  "), firstSep)
-	assert.Equal(t, strings.Index(lines[2], "  -  "), firstSep)
+	if firstSep != len("/longer-path") {
+		t.Fatalf("got %v, want %v", firstSep, len("/longer-path"))
+	}
+	if strings.Index(lines[1], "  -  ") != firstSep {
+		t.Fatalf("got %v, want %v", strings.Index(lines[1], "  -  "), firstSep)
+	}
+	if strings.Index(lines[2], "  -  ") != firstSep {
+		t.Fatalf("got %v, want %v", strings.Index(lines[2], "  -  "), firstSep)
+	}
 
 	// The synced segment must follow the status column on rows with a fresh entry...
-	assert.Assert(t, strings.Contains(lines[0], "synced "), "running row should include a synced segment")
-	assert.Assert(t, strings.Contains(lines[1], "synced "), "paused row should include a synced segment")
+	if !strings.Contains(lines[0], "synced ") {
+		t.Fatalf("assertion failed: strings.Contains(lines[0], \"synced \")")
+	}
+	if !strings.Contains(lines[1], "synced ") {
+		t.Fatalf("assertion failed: strings.Contains(lines[1], \"synced \")")
+	}
 	// ...but not on the unknown (stale) row.
-	assert.Assert(t, !strings.Contains(lines[2], "synced "), "unknown row should omit the synced segment")
-	assert.Assert(t, strings.Contains(lines[2], "unknown (daemon may not be running)"), "unknown row should carry the status label")
+	if strings.Contains(lines[2], "synced ") {
+		t.Fatalf("assertion failed: !strings.Contains(lines[2], \"synced \")")
+	}
+	if !strings.Contains(lines[2], "unknown (daemon may not be running)") {
+		t.Fatalf("assertion failed: strings.Contains(lines[2], \"unknown (daemon may not be running)\")")
+	}
 }
 
 // @description    Verifies the paused-stage to reason mapping.
@@ -290,7 +319,9 @@ func Test_ReasonForStage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, reasonForStage(tt.stage), tt.want)
+			if reasonForStage(tt.stage) != tt.want {
+				t.Fatalf("got %v, want %v", reasonForStage(tt.stage), tt.want)
+			}
 		})
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Verifies the equal synchronization state.
@@ -21,8 +20,12 @@ func Test_ResolveUpstreamState_Equal(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_nothing", []string{"rebase_parent"})
 
 	state, err := resolveUpstreamState(slog.Default(), repoConfig)
-	assert.NilError(t, err)
-	assert.Equal(t, state, upstreamStateEqual)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != upstreamStateEqual {
+		t.Fatalf("got %v, want %v", state, upstreamStateEqual)
+	}
 }
 
 // @description    Verifies the local-ahead synchronization state.
@@ -35,8 +38,12 @@ func Test_ResolveUpstreamState_LocalAhead(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_local_commits", []string{"rebase_parent"})
 
 	state, err := resolveUpstreamState(slog.Default(), repoConfig)
-	assert.NilError(t, err)
-	assert.Equal(t, state, upstreamStateLocalAhead)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != upstreamStateLocalAhead {
+		t.Fatalf("got %v, want %v", state, upstreamStateLocalAhead)
+	}
 }
 
 // @description    Verifies the upstream-ahead synchronization state.
@@ -49,8 +56,12 @@ func Test_ResolveUpstreamState_UpstreamAhead(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_remote_commits", []string{"rebase_parent"})
 
 	state, err := resolveUpstreamState(slog.Default(), repoConfig)
-	assert.NilError(t, err)
-	assert.Equal(t, state, upstreamStateUpstreamAhead)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != upstreamStateUpstreamAhead {
+		t.Fatalf("got %v, want %v", state, upstreamStateUpstreamAhead)
+	}
 }
 
 // @description    Verifies the diverged synchronization state.
@@ -63,8 +74,12 @@ func Test_ResolveUpstreamState_Diverged(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_both_commits", []string{"rebase_parent"})
 
 	state, err := resolveUpstreamState(slog.Default(), repoConfig)
-	assert.NilError(t, err)
-	assert.Equal(t, state, upstreamStateDiverged)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != upstreamStateDiverged {
+		t.Fatalf("got %v, want %v", state, upstreamStateDiverged)
+	}
 }
 
 // @description    Verifies the no-upstream synchronization state.
@@ -76,17 +91,35 @@ func Test_ResolveUpstreamState_Diverged(t *testing.T) {
 // @param           t   "test handle used to create the repository and assert the state"
 func Test_ResolveUpstreamState_NoUpstream(t *testing.T) {
 	repoPath := t.TempDir()
-	assert.NilError(t, exec.Command("git", "init", repoPath).Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "config", "user.name", "Git Auto Sync Tests").Run())
-	assert.NilError(t, os.WriteFile(filepath.Join(repoPath, "file.txt"), []byte("initial"), 0644))
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "add", "file.txt").Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run())
+	if err := exec.Command("git", "init", repoPath).Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "config", "user.name", "Git Auto Sync Tests").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "file.txt"), []byte("initial"), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "add", "file.txt").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	cfg, err := config.NewRepoConfig(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	state, err := resolveUpstreamState(slog.Default(), cfg)
-	assert.NilError(t, err)
-	assert.Equal(t, state, upstreamStateNone)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != upstreamStateNone {
+		t.Fatalf("got %v, want %v", state, upstreamStateNone)
+	}
 }

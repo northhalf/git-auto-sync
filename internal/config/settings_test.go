@@ -1,10 +1,9 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 	"time"
-
-	"gotest.tools/v3/assert"
 )
 
 // @description    Prepares an isolated configuration directory.
@@ -33,12 +32,18 @@ func Test_SettingsRoundTrip(t *testing.T) {
 		Envs:  []string{"SSH_AUTH_SOCK=/private/tmp/com.apple.launchd.74ZznY1v1F/Listeners"},
 	}
 	err := WriteGlobalSettings(c)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	c2, err := ReadGlobalSettings()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.DeepEqual(t, c, c2)
+	if !reflect.DeepEqual(c, c2) {
+		t.Fatalf("got %#v, want %#v", c, c2)
+	}
 }
 
 // @description    Verifies the default constants.
@@ -48,9 +53,15 @@ func Test_SettingsRoundTrip(t *testing.T) {
 //
 // @param           t   "test handle used for assertions"
 func Test_Defaults(t *testing.T) {
-	assert.Equal(t, DefaultSyncInterval, 60*time.Minute)
-	assert.Equal(t, DefaultDebounce, 10*time.Minute)
-	assert.Equal(t, DefaultGitExec, "git")
+	if DefaultSyncInterval != 60*time.Minute {
+		t.Fatalf("got %v, want %v", DefaultSyncInterval, 60*time.Minute)
+	}
+	if DefaultDebounce != 10*time.Minute {
+		t.Fatalf("got %v, want %v", DefaultDebounce, 10*time.Minute)
+	}
+	if DefaultGitExec != "git" {
+		t.Fatalf("got %v, want %v", DefaultGitExec, "git")
+	}
 }
 
 // @description    Verifies reads without a configuration file.
@@ -63,11 +74,21 @@ func Test_ReadEmpty(t *testing.T) {
 	setup(t)
 
 	c, err := ReadGlobalSettings()
-	assert.NilError(t, err)
-	assert.Assert(t, len(c.Repos) == 0)
-	assert.Assert(t, c.SyncInterval == nil)
-	assert.Assert(t, c.Debounce == nil)
-	assert.Assert(t, c.GitExec == nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(c.Repos) != 0 {
+		t.Fatalf("assertion failed: len(c.Repos) == 0")
+	}
+	if c.SyncInterval != nil {
+		t.Fatalf("assertion failed: c.SyncInterval == nil")
+	}
+	if c.Debounce != nil {
+		t.Fatalf("assertion failed: c.Debounce == nil")
+	}
+	if c.GitExec != nil {
+		t.Fatalf("assertion failed: c.GitExec == nil")
+	}
 }
 
 // @description    Verifies the global settings modification time.
@@ -80,15 +101,25 @@ func Test_GlobalSettingsModTime(t *testing.T) {
 	setup(t)
 
 	mod, err := GlobalSettingsModTime()
-	assert.NilError(t, err)
-	assert.Assert(t, mod.IsZero(), "expected zero mod time when config file is absent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mod.IsZero() {
+		t.Fatalf("assertion failed: mod.IsZero()")
+	}
 
 	err = WriteGlobalSettings(&Settings{Repos: []string{"/repo"}})
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	mod, err = GlobalSettingsModTime()
-	assert.NilError(t, err)
-	assert.Assert(t, !mod.IsZero(), "expected non-zero mod time after writing config")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mod.IsZero() {
+		t.Fatalf("assertion failed: !mod.IsZero()")
+	}
 }
 
 // @description    Verifies Resolve applies local over global over default.
@@ -125,9 +156,15 @@ func Test_Resolve(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			sync, debounce, gitExec := Resolve(tc.global, tc.local)
-			assert.Equal(t, sync, tc.wantSync)
-			assert.Equal(t, debounce, tc.wantDebounce)
-			assert.Equal(t, gitExec, tc.wantGit)
+			if sync != tc.wantSync {
+				t.Fatalf("got %v, want %v", sync, tc.wantSync)
+			}
+			if debounce != tc.wantDebounce {
+				t.Fatalf("got %v, want %v", debounce, tc.wantDebounce)
+			}
+			if gitExec != tc.wantGit {
+				t.Fatalf("got %v, want %v", gitExec, tc.wantGit)
+			}
 		})
 	}
 }
@@ -139,13 +176,21 @@ func Test_Resolve(t *testing.T) {
 // @param           t   "test handle used for assertions"
 func Test_ResolveNils(t *testing.T) {
 	sync, debounce, gitExec := Resolve(nil, nil)
-	assert.Equal(t, sync, DefaultSyncInterval)
-	assert.Equal(t, debounce, DefaultDebounce)
-	assert.Equal(t, gitExec, DefaultGitExec)
+	if sync != DefaultSyncInterval {
+		t.Fatalf("got %v, want %v", sync, DefaultSyncInterval)
+	}
+	if debounce != DefaultDebounce {
+		t.Fatalf("got %v, want %v", debounce, DefaultDebounce)
+	}
+	if gitExec != DefaultGitExec {
+		t.Fatalf("got %v, want %v", gitExec, DefaultGitExec)
+	}
 
 	v := 30
 	sync, _, _ = Resolve(nil, &Settings{SyncInterval: &v})
-	assert.Equal(t, sync, 30*time.Minute)
+	if sync != 30*time.Minute {
+		t.Fatalf("got %v, want %v", sync, 30*time.Minute)
+	}
 }
 
 // @description    Verifies LocalFingerprint changes only when [auto-sync] keys change.
@@ -156,18 +201,28 @@ func Test_ResolveNils(t *testing.T) {
 //
 // @param           t   "test handle used for assertions"
 func Test_LocalFingerprint(t *testing.T) {
-	assert.Equal(t, LocalFingerprint(nil), LocalFingerprint(&Settings{}))
+	if LocalFingerprint(nil) != LocalFingerprint(&Settings{}) {
+		t.Fatalf("got %v, want %v", LocalFingerprint(nil), LocalFingerprint(&Settings{}))
+	}
 
 	a := 30
 	b := 5
 	gitA := "/usr/bin/git"
 	base := &Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}
 	fp := LocalFingerprint(base)
-	assert.Equal(t, fp, LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}))
+	if fp != LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}) {
+		t.Fatalf("got %v, want %v", fp, LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}))
+	}
 
 	changed := 40
-	assert.Assert(t, LocalFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) != fp)
-	assert.Assert(t, LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) != fp)
+	if LocalFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) == fp {
+		t.Fatalf("assertion failed: LocalFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) != fp")
+	}
+	if LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) == fp {
+		t.Fatalf("assertion failed: LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) != fp")
+	}
 	gitB := "/opt/git/bin/git"
-	assert.Assert(t, LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) != fp)
+	if LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) == fp {
+		t.Fatalf("assertion failed: LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) != fp")
+	}
 }

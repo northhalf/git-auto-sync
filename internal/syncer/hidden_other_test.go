@@ -5,8 +5,6 @@ package syncer
 import (
 	"path/filepath"
 	"testing"
-
-	"gotest.tools/v3/assert"
 )
 
 // @description    Verifies the no-op hidden-attribute stub is inert.
@@ -17,5 +15,7 @@ import (
 // @param           t   "test handle used for path construction and assertion"
 func Test_IsHiddenByOS_StubReturnsFalse(t *testing.T) {
 	repo := t.TempDir()
-	assert.Equal(t, isHiddenByOS(repo, filepath.Join(repo, "src", "file.go")), false)
+	if isHiddenByOS(repo, filepath.Join(repo, "src", "file.go")) != false {
+		t.Fatalf("got %v, want %v", isHiddenByOS(repo, filepath.Join(repo, "src", "file.go")), false)
+	}
 }

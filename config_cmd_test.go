@@ -9,7 +9,6 @@ import (
 	git "github.com/go-git/go-git/v5"
 	cfg "github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/urfave/cli/v2"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Isolates the global config directory for the test.
@@ -61,7 +60,9 @@ func initRepo(t *testing.T) string {
 	t.Helper()
 	repoPath := t.TempDir()
 	_, err := git.PlainInit(repoPath, false)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	t.Chdir(repoPath)
 	return repoPath
 }
@@ -74,11 +75,17 @@ func initRepo(t *testing.T) string {
 func Test_ConfigWriteDefaultGlobal(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "syncInterval", "90")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	s, err := cfg.ReadGlobalSettings()
-	assert.NilError(t, err)
-	assert.Equal(t, *s.SyncInterval, 90)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *s.SyncInterval != 90 {
+		t.Fatalf("got %v, want %v", *s.SyncInterval, 90)
+	}
 }
 
 // @description    Verifies --global write.
@@ -89,11 +96,17 @@ func Test_ConfigWriteDefaultGlobal(t *testing.T) {
 func Test_ConfigWriteGlobal(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "--global", "debounce", "7")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	s, err := cfg.ReadGlobalSettings()
-	assert.NilError(t, err)
-	assert.Equal(t, *s.Debounce, 7)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *s.Debounce != 7 {
+		t.Fatalf("got %v, want %v", *s.Debounce, 7)
+	}
 }
 
 // @description    Verifies --local write.
@@ -105,14 +118,22 @@ func Test_ConfigWriteLocal(t *testing.T) {
 	configEnv(t)
 	repoPath := initRepo(t)
 	gitPath, err := exec.LookPath("git")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	_, err = runConfigIn(t, "--local", "gitexec", gitPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	local, err := cfg.ReadLocalSettings(repoPath)
-	assert.NilError(t, err)
-	assert.Equal(t, *local.GitExec, gitPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *local.GitExec != gitPath {
+		t.Fatalf("got %v, want %v", *local.GitExec, gitPath)
+	}
 }
 
 // @description    Verifies effective read with no scope.
@@ -125,14 +146,24 @@ func Test_ConfigReadEffective(t *testing.T) {
 	configEnv(t)
 
 	out, err := runConfigIn(t, "syncInterval")
-	assert.NilError(t, err)
-	assert.Assert(t, strings.Contains(out, "60"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "60") {
+		t.Fatalf("assertion failed: strings.Contains(out, \"60\")")
+	}
 
 	_, err = runConfigIn(t, "--global", "syncInterval", "45")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	out, err = runConfigIn(t, "syncInterval")
-	assert.NilError(t, err)
-	assert.Assert(t, strings.Contains(out, "45"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "45") {
+		t.Fatalf("assertion failed: strings.Contains(out, \"45\")")
+	}
 }
 
 // @description    Verifies --local read shows only the local value.
@@ -146,13 +177,23 @@ func Test_ConfigReadLocal(t *testing.T) {
 	repoPath := initRepo(t)
 
 	out, err := runConfigIn(t, "--local", "syncInterval")
-	assert.NilError(t, err)
-	assert.Equal(t, strings.TrimSpace(out), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("got %v, want %v", strings.TrimSpace(out), "")
+	}
 
-	assert.NilError(t, cfg.SetLocalSetting(repoPath, "syncInterval", "33"))
+	if err := cfg.SetLocalSetting(repoPath, "syncInterval", "33"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	out, err = runConfigIn(t, "--local", "syncInterval")
-	assert.NilError(t, err)
-	assert.Assert(t, strings.Contains(out, "33"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "33") {
+		t.Fatalf("assertion failed: strings.Contains(out, \"33\")")
+	}
 }
 
 // @description    Verifies --list prints all three effective keys.
@@ -163,10 +204,18 @@ func Test_ConfigReadLocal(t *testing.T) {
 func Test_ConfigList(t *testing.T) {
 	configEnv(t)
 	out, err := runConfigIn(t, "--list")
-	assert.NilError(t, err)
-	assert.Assert(t, strings.Contains(out, "syncInterval"))
-	assert.Assert(t, strings.Contains(out, "debounce"))
-	assert.Assert(t, strings.Contains(out, "gitexec"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "syncInterval") {
+		t.Fatalf("assertion failed: strings.Contains(out, \"syncInterval\")")
+	}
+	if !strings.Contains(out, "debounce") {
+		t.Fatalf("assertion failed: strings.Contains(out, \"debounce\")")
+	}
+	if !strings.Contains(out, "gitexec") {
+		t.Fatalf("assertion failed: strings.Contains(out, \"gitexec\")")
+	}
 }
 
 // @description    Verifies --unset removes a global key.
@@ -177,13 +226,21 @@ func Test_ConfigList(t *testing.T) {
 func Test_ConfigUnsetGlobal(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "syncInterval", "90")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	_, err = runConfigIn(t, "--unset", "syncInterval")
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	s, err := cfg.ReadGlobalSettings()
-	assert.NilError(t, err)
-	assert.Assert(t, s.SyncInterval == nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.SyncInterval != nil {
+		t.Fatalf("assertion failed: s.SyncInterval == nil")
+	}
 }
 
 // @description    Verifies an unknown key errors.
@@ -194,7 +251,9 @@ func Test_ConfigUnsetGlobal(t *testing.T) {
 func Test_ConfigUnknownKey(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "bogus", "1")
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }
 
 // @description    Verifies a non-positive interval errors.
@@ -205,9 +264,13 @@ func Test_ConfigUnknownKey(t *testing.T) {
 func Test_ConfigInvalidInterval(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "syncInterval", "0")
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 	_, err = runConfigIn(t, "syncInterval", "-5")
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }
 
 // @description    Verifies a nonexistent gitexec errors on write.
@@ -218,7 +281,9 @@ func Test_ConfigInvalidInterval(t *testing.T) {
 func Test_ConfigGitExecMissing(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "gitexec", "/does/not/exist/git")
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }
 
 // @description    Verifies --global and --local together error.
@@ -229,7 +294,9 @@ func Test_ConfigGitExecMissing(t *testing.T) {
 func Test_ConfigBothScopes(t *testing.T) {
 	configEnv(t)
 	_, err := runConfigIn(t, "--global", "--local", "syncInterval", "10")
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }
 
 // @description    Verifies --local outside a repo errors.
@@ -241,5 +308,7 @@ func Test_ConfigLocalOutsideRepo(t *testing.T) {
 	configEnv(t)
 	t.Chdir(t.TempDir())
 	_, err := runConfigIn(t, "--local", "syncInterval", "10")
-	assert.Assert(t, err != nil)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }

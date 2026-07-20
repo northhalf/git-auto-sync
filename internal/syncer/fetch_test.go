@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -12,7 +13,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Prepares related repository fixtures.
@@ -35,10 +35,14 @@ func PrepareMultiFixtures(t *testing.T, name string, deps []string) config.RepoC
 		fixturePath := filepath.Join("testdata", name)
 		newPath := filepath.Join(newTestDataPath, name)
 		err := os.CopyFS(newPath, os.DirFS(fixturePath))
-		assert.NilError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		err = os.Rename(filepath.Join(newPath, ".gitted"), filepath.Join(newPath, ".git"))
-		assert.NilError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 
 	repoConfig := PrepareFixture(t, name)
@@ -61,12 +65,16 @@ func FixFixtureGitConfig(t *testing.T, newRepoPath string, testDataPath string) 
 	dotGitPath := filepath.Join(newRepoPath, ".git")
 	gitConfigFilePath := filepath.Join(dotGitPath, "config")
 	input, err := os.ReadFile(gitConfigFilePath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	output := bytes.ReplaceAll(input, []byte("$TESTDATA$"), []byte(testDataPath))
 
 	err = os.WriteFile(gitConfigFilePath, output, 0666)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 // @description    Configures the fixture branch to track an upstream branch.
@@ -84,8 +92,12 @@ func FixFixtureGitConfig(t *testing.T, newRepoPath string, testDataPath string) 
 // @param           upstreamBranch  "branch on the remote the master branch tracks"
 func setFixtureUpstream(t *testing.T, repoPath string, upstreamRemote string, upstreamBranch string) {
 	t.Helper()
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "config", "branch.master.remote", upstreamRemote).Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "config", "branch.master.merge", "refs/heads/"+upstreamBranch).Run())
+	if err := exec.Command("git", "-C", repoPath, "config", "branch.master.remote", upstreamRemote).Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "config", "branch.master.merge", "refs/heads/"+upstreamBranch).Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 // @description    Verifies remote-tracking updates.
@@ -100,20 +112,32 @@ func Test_SimpleFetch(t *testing.T) {
 	setFixtureUpstream(t, repoConfig.RepoPath, "origin1", "master")
 
 	err := fetch(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	head, err := r.Head()
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Equal(t, head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+	if head.Hash() != plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57") {
+		t.Fatalf("got %v, want %v", head.Hash(), plumbing.NewHash("28cc969d97ddb7640f5e1428bbc8f2947d1ffd57"))
+	}
 
 	ref, err := r.Reference(plumbing.NewRemoteReferenceName("origin1", "master"), true)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Equal(t, ref.Hash(), plumbing.NewHash("7058b6b292ee3d1382670334b5f29570a1117ef1"))
+	if ref.Hash() != plumbing.NewHash("7058b6b292ee3d1382670334b5f29570a1117ef1") {
+		t.Fatalf("got %v, want %v", ref.Hash(), plumbing.NewHash("7058b6b292ee3d1382670334b5f29570a1117ef1"))
+	}
 }
 
 // @description    Verifies fetching skips a branch without an upstream.
@@ -127,13 +151,19 @@ func Test_FetchSkipsWithoutUpstream(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "simple_fetch", []string{"multiple_file_change"})
 
 	err := fetch(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	_, err = r.Reference(plumbing.NewRemoteReferenceName("origin1", "master"), true)
-	assert.ErrorIs(t, err, plumbing.ErrReferenceNotFound)
+	if !errors.Is(err, plumbing.ErrReferenceNotFound) {
+		t.Fatalf("error %v is not %v", err, plumbing.ErrReferenceNotFound)
+	}
 }
 
 // @description    Verifies fetch only updates the upstream remote.
@@ -148,21 +178,35 @@ func Test_FetchOnlyUpstreamRemote(t *testing.T) {
 	setFixtureUpstream(t, repoConfig.RepoPath, "origin1", "master")
 
 	remoteURL, err := exec.Command("git", "-C", repoConfig.RepoPath, "remote", "get-url", "origin1").Output()
-	assert.NilError(t, err)
-	assert.NilError(t, exec.Command("git", "-C", repoConfig.RepoPath, "remote", "add", "origin2", strings.TrimSpace(string(remoteURL))).Run())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoConfig.RepoPath, "remote", "add", "origin2", strings.TrimSpace(string(remoteURL))).Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err = fetch(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	r, err := git.PlainOpen(repoConfig.RepoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ref, err := r.Reference(plumbing.NewRemoteReferenceName("origin1", "master"), true)
-	assert.NilError(t, err)
-	assert.Equal(t, ref.Hash(), plumbing.NewHash("7058b6b292ee3d1382670334b5f29570a1117ef1"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref.Hash() != plumbing.NewHash("7058b6b292ee3d1382670334b5f29570a1117ef1") {
+		t.Fatalf("got %v, want %v", ref.Hash(), plumbing.NewHash("7058b6b292ee3d1382670334b5f29570a1117ef1"))
+	}
 
 	_, err = r.Reference(plumbing.NewRemoteReferenceName("origin2", "master"), true)
-	assert.ErrorIs(t, err, plumbing.ErrReferenceNotFound)
+	if !errors.Is(err, plumbing.ErrReferenceNotFound) {
+		t.Fatalf("error %v is not %v", err, plumbing.ErrReferenceNotFound)
+	}
 }
 
 // @description    Verifies fetching skips a branch tracking a local branch.
@@ -176,7 +220,9 @@ func Test_FetchSkipsLocalUpstream(t *testing.T) {
 	setFixtureUpstream(t, repoConfig.RepoPath, ".", "master")
 
 	err := fetch(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 // @description    Verifies an unreachable upstream remote fails the fetch.
@@ -190,8 +236,12 @@ func Test_FetchRemoteFailure(t *testing.T) {
 	setFixtureUpstream(t, repoConfig.RepoPath, "origin1", "master")
 
 	missingRemote := filepath.Join(t.TempDir(), "missing.git")
-	assert.NilError(t, exec.Command("git", "-C", repoConfig.RepoPath, "remote", "set-url", "origin1", missingRemote).Run())
+	if err := exec.Command("git", "-C", repoConfig.RepoPath, "remote", "set-url", "origin1", missingRemote).Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err := fetch(slog.Default(), repoConfig)
-	assert.Assert(t, err != nil, "expected an error for an unreachable upstream remote")
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
 }

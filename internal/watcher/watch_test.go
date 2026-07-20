@@ -13,7 +13,6 @@ import (
 
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/rjeczalik/notify"
-	"gotest.tools/v3/assert"
 )
 
 type fakeEventInfo struct {
@@ -75,7 +74,9 @@ func waitForWatchDone(t *testing.T, done <-chan error) {
 	t.Helper()
 	select {
 	case err := <-done:
-		assert.NilError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for watcher to stop")
 	}
@@ -108,7 +109,9 @@ func Test_RetryDelay(t *testing.T) {
 	}
 
 	for failure := range want {
-		assert.Equal(t, retryDelay(failure, delays), want[failure])
+		if retryDelay(failure, delays) != want[failure] {
+			t.Fatalf("got %v, want %v", retryDelay(failure, delays), want[failure])
+		}
 	}
 }
 
@@ -142,9 +145,15 @@ func Test_WatchLoopRetriesRemoteErrors(t *testing.T) {
 		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, nil, deps)
 	}()
 
-	assert.Equal(t, waitForSyncCall(t, calls), 1)
-	assert.Equal(t, waitForSyncCall(t, calls), 2)
-	assert.Equal(t, waitForSyncCall(t, calls), 3)
+	if waitForSyncCall(t, calls) != 1 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 1)
+	}
+	if waitForSyncCall(t, calls) != 2 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 2)
+	}
+	if waitForSyncCall(t, calls) != 3 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 3)
+	}
 
 	cancel()
 	waitForWatchDone(t, done)
@@ -181,14 +190,22 @@ func Test_WatchLoopResetsRetryAfterSuccess(t *testing.T) {
 		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, ticks, deps)
 	}()
 
-	assert.Equal(t, waitForSyncCall(t, calls), 1)
-	assert.Equal(t, waitForSyncCall(t, calls), 2)
+	if waitForSyncCall(t, calls) != 1 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 1)
+	}
+	if waitForSyncCall(t, calls) != 2 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 2)
+	}
 	ticks <- time.Now()
-	assert.Equal(t, waitForSyncCall(t, calls), 3)
+	if waitForSyncCall(t, calls) != 3 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 3)
+	}
 
 	select {
 	case call := <-calls:
-		assert.Equal(t, call, 4)
+		if call != 4 {
+			t.Fatalf("got %v, want %v", call, 4)
+		}
 	case <-time.After(30 * time.Millisecond):
 		t.Fatal("retry delay did not reset after successful synchronization")
 	}
@@ -224,7 +241,9 @@ func Test_WatchLoopPausesAfterNonRemoteError(t *testing.T) {
 		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, ticks, deps)
 	}()
 
-	assert.Equal(t, waitForSyncCall(t, calls), 1)
+	if waitForSyncCall(t, calls) != 1 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 1)
+	}
 	for range 3 {
 		ticks <- time.Now()
 	}
@@ -271,12 +290,16 @@ func Test_WatchLoopCoalescesTriggersDuringSync(t *testing.T) {
 		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, ticks, deps)
 	}()
 
-	assert.Equal(t, waitForSyncCall(t, calls), 1)
+	if waitForSyncCall(t, calls) != 1 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 1)
+	}
 	for range 3 {
 		ticks <- time.Now()
 	}
 	close(releaseFirst)
-	assert.Equal(t, waitForSyncCall(t, calls), 2)
+	if waitForSyncCall(t, calls) != 2 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 2)
+	}
 
 	select {
 	case call := <-calls:
@@ -329,7 +352,9 @@ func Test_WatchLoopImmediateTriggersCancelDebounce(t *testing.T) {
 				done <- runWatchLoop(ctx, discardLogger(), 100*time.Millisecond, events, awake, ticks, deps)
 			}()
 
-			assert.Equal(t, waitForSyncCall(t, calls), 1)
+			if waitForSyncCall(t, calls) != 1 {
+				t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 1)
+			}
 			time.Sleep(5 * time.Millisecond)
 			events <- fakeEventInfo{path: "/repo/file"}
 			if tt.wake {
@@ -340,7 +365,9 @@ func Test_WatchLoopImmediateTriggersCancelDebounce(t *testing.T) {
 
 			select {
 			case call := <-calls:
-				assert.Equal(t, call, 2)
+				if call != 2 {
+					t.Fatalf("got %v, want %v", call, 2)
+				}
 			case <-time.After(30 * time.Millisecond):
 				t.Fatal("immediate trigger waited for filesystem debounce")
 			}
@@ -416,7 +443,9 @@ func Test_WatchForChangesKeepsRunningAfterInitialRemoteFailure(t *testing.T) {
 	}
 	for _, args := range commands {
 		cmd := exec.Command("git", args...)
-		assert.NilError(t, cmd.Run())
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 
 	cfg := config.RepoConfig{
@@ -470,7 +499,9 @@ func Test_WatchLoopReportsStateTransitions(t *testing.T) {
 		done <- runWatchLoop(ctx, discardLogger(), time.Millisecond, nil, nil, nil, deps)
 	}()
 
-	assert.Equal(t, waitForSyncCall(t, calls), 1)
+	if waitForSyncCall(t, calls) != 1 {
+		t.Fatalf("got %v, want %v", waitForSyncCall(t, calls), 1)
+	}
 
 	recv := func() StateReport {
 		select {
@@ -484,13 +515,21 @@ func Test_WatchLoopReportsStateTransitions(t *testing.T) {
 
 	// Start report: running.
 	start := recv()
-	assert.Assert(t, !start.Paused)
-	assert.Equal(t, start.Stage, "")
+	if start.Paused {
+		t.Fatalf("assertion failed: !start.Paused")
+	}
+	if start.Stage != "" {
+		t.Fatalf("got %v, want %v", start.Stage, "")
+	}
 
 	// Pause report after the non-remote error.
 	paused := recv()
-	assert.Assert(t, paused.Paused)
-	assert.Equal(t, paused.Stage, "author")
+	if !paused.Paused {
+		t.Fatalf("assertion failed: paused.Paused")
+	}
+	if paused.Stage != "author" {
+		t.Fatalf("got %v, want %v", paused.Stage, "author")
+	}
 
 	cancel()
 	waitForWatchDone(t, done)
@@ -543,7 +582,9 @@ func Test_WatchLoopWaitsForRunningSyncOnInspectionError(t *testing.T) {
 	close(release)
 	select {
 	case err := <-done:
-		assert.Assert(t, errors.Is(err, inspectErr))
+		if !errors.Is(err, inspectErr) {
+			t.Fatalf("assertion failed: errors.Is(err, inspectErr)")
+		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for watcher inspection error")
 	}

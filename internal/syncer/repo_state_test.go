@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
-	"gotest.tools/v3/assert"
 )
 
 // @description    Creates a fresh repository with one commit.
@@ -25,12 +24,24 @@ import (
 func initRepoWithCommit(t *testing.T) string {
 	t.Helper()
 	repoPath := t.TempDir()
-	assert.NilError(t, exec.Command("git", "init", repoPath).Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "config", "user.name", "Git Auto Sync Tests").Run())
-	assert.NilError(t, os.WriteFile(filepath.Join(repoPath, "file.txt"), []byte("initial"), 0o644))
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "add", "file.txt").Run())
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run())
+	if err := exec.Command("git", "init", repoPath).Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "config", "user.name", "Git Auto Sync Tests").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "file.txt"), []byte("initial"), 0o644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "add", "file.txt").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	return repoPath
 }
 
@@ -44,7 +55,9 @@ func Test_CheckRepoState_HappyPath(t *testing.T) {
 	repoConfig := PrepareMultiFixtures(t, "rebase_nothing", []string{"rebase_parent"})
 
 	err := checkRepoState(slog.Default(), repoConfig)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 // @description    Verifies that a branch without an upstream is rejected.
@@ -56,11 +69,17 @@ func Test_CheckRepoState_HappyPath(t *testing.T) {
 func Test_CheckRepoState_NoUpstream(t *testing.T) {
 	repoPath := initRepoWithCommit(t)
 	cfg, err := config.NewRepoConfig(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err = checkRepoState(slog.Default(), cfg)
-	assert.Assert(t, err != nil, "expected an error for a branch without upstream")
-	assert.Assert(t, errors.Is(err, errNoUpstream), "expected errNoUpstream, got %v", err)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
+	if !errors.Is(err, errNoUpstream) {
+		t.Fatalf("expected errNoUpstream, got %v", err)
+	}
 }
 
 // @description    Verifies that a detached HEAD is rejected before the upstream check.
@@ -72,13 +91,21 @@ func Test_CheckRepoState_NoUpstream(t *testing.T) {
 // @param           t   "test handle used for repository setup and assertion"
 func Test_CheckRepoState_DetachedHead(t *testing.T) {
 	repoPath := initRepoWithCommit(t)
-	assert.NilError(t, exec.Command("git", "-C", repoPath, "checkout", "--detach").Run())
+	if err := exec.Command("git", "-C", repoPath, "checkout", "--detach").Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	cfg, err := config.NewRepoConfig(repoPath)
-	assert.NilError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	err = checkRepoState(slog.Default(), cfg)
-	assert.Assert(t, err != nil, "expected an error for a detached HEAD")
-	assert.Assert(t, errors.Is(err, errDetachedHead), "expected errDetachedHead, got %v", err)
+	if err == nil {
+		t.Fatalf("assertion failed: err != nil")
+	}
+	if !errors.Is(err, errDetachedHead) {
+		t.Fatalf("expected errDetachedHead, got %v", err)
+	}
 }
 
 // @description    Verifies that an in-progress Git operation is rejected.
@@ -105,14 +132,22 @@ func Test_CheckRepoState_Busy(t *testing.T) {
 			repoConfig := PrepareMultiFixtures(t, "rebase_nothing", []string{"rebase_parent"})
 			markerPath := filepath.Join(repoConfig.RepoPath, ".git", tt.marker)
 			if tt.isDir {
-				assert.NilError(t, os.Mkdir(markerPath, 0o755))
+				if err := os.Mkdir(markerPath, 0o755); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
 			} else {
-				assert.NilError(t, os.WriteFile(markerPath, []byte("deadbeef\n"), 0o644))
+				if err := os.WriteFile(markerPath, []byte("deadbeef\n"), 0o644); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
 			}
 
 			err := checkRepoState(slog.Default(), repoConfig)
-			assert.Assert(t, err != nil, "expected an error for marker %s", tt.marker)
-			assert.Assert(t, errors.Is(err, errRepoBusy), "expected errRepoBusy for %s, got %v", tt.name, err)
+			if err == nil {
+				t.Fatalf("expected an error for marker %s", tt.marker)
+			}
+			if !errors.Is(err, errRepoBusy) {
+				t.Fatalf("expected errRepoBusy for %s, got %v", tt.name, err)
+			}
 		})
 	}
 }
@@ -136,7 +171,9 @@ func Test_RepoStateStage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, repoStateStage(tt.err), tt.want)
+			if repoStateStage(tt.err) != tt.want {
+				t.Fatalf("got %v, want %v", repoStateStage(tt.err), tt.want)
+			}
 		})
 	}
 }
