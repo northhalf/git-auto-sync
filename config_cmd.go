@@ -12,13 +12,6 @@ import (
 	"github.com/ztrue/tracerr"
 )
 
-// configKeys is the set of keys the config command accepts.
-var configKeys = map[string]struct{}{
-	"syncInterval": {},
-	"debounce":     {},
-	"gitexec":      {},
-}
-
 // errConfigUsage signals a config command usage error.
 var errConfigUsage = errors.New("usage: git-auto-sync config [--global|--local] [--get|--list|--unset] <key> [value]")
 
@@ -98,7 +91,8 @@ func scopeLocal(ctx *cli.Context) bool { return ctx.Bool("local") }
 //
 // @return          error   "nil on success, or a validation or storage error"
 func configSet(ctx *cli.Context, key, value string) error {
-	if _, ok := configKeys[key]; !ok {
+	field, ok := cfg.SettingKeys[key]
+	if !ok {
 		return tracerr.Errorf("unknown setting: %s", key)
 	}
 	parsed, err := parseValue(key, value)
@@ -118,7 +112,7 @@ func configSet(ctx *cli.Context, key, value string) error {
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
-	if err := applyGlobal(settings, key, parsed); err != nil {
+	if err := field.Decode(settings, parsed); err != nil {
 		return tracerr.Wrap(err)
 	}
 	return cfg.WriteGlobalSettings(settings)
@@ -135,7 +129,8 @@ func configSet(ctx *cli.Context, key, value string) error {
 //
 // @return          error   "nil on success, or a storage error"
 func configGet(ctx *cli.Context, key string) error {
-	if _, ok := configKeys[key]; !ok {
+	field, ok := cfg.SettingKeys[key]
+	if !ok {
 		return tracerr.Errorf("unknown setting: %s", key)
 	}
 
@@ -148,7 +143,7 @@ func configGet(ctx *cli.Context, key string) error {
 		if err != nil {
 			return tracerr.Wrap(err)
 		}
-		if v, ok := localFieldString(local, key); ok {
+		if v, ok := field.Raw(local); ok {
 			_, _ = fmt.Fprintln(ctx.App.Writer, v)
 		}
 		return nil
@@ -216,7 +211,8 @@ func configList(ctx *cli.Context) error {
 //
 // @return          error   "nil on success, or a storage error"
 func configUnset(ctx *cli.Context, key string) error {
-	if _, ok := configKeys[key]; !ok {
+	field, ok := cfg.SettingKeys[key]
+	if !ok {
 		return tracerr.Errorf("unknown setting: %s", key)
 	}
 
@@ -232,7 +228,7 @@ func configUnset(ctx *cli.Context, key string) error {
 	if err != nil {
 		return tracerr.Wrap(err)
 	}
-	clearGlobal(settings, key)
+	field.Clear(settings)
 	return cfg.WriteGlobalSettings(settings)
 }
 
@@ -266,85 +262,6 @@ func parseValue(key, value string) (string, error) {
 		return value, nil
 	}
 	return "", tracerr.Errorf("unknown setting: %s", key)
-}
-
-// @description    Sets key=value on a Settings in memory.
-//
-// applyGlobal parses value for the matching field and assigns it; unknown keys are ignored.
-//
-// @param           s       "settings to mutate"
-//
-// @param           key     "one of syncInterval, debounce, gitexec"
-//
-// @param           value   "parsed value to assign"
-//
-// @return          error   "nil on success, or a parse error"
-func applyGlobal(s *cfg.Settings, key, value string) error {
-	switch key {
-	case "syncInterval":
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return tracerr.Wrap(err)
-		}
-		s.SyncInterval = &n
-	case "debounce":
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return tracerr.Wrap(err)
-		}
-		s.Debounce = &n
-	case "gitexec":
-		s.GitExec = &value
-	}
-	return nil
-}
-
-// @description    Nils key on a Settings in memory.
-//
-// clearGlobal sets the matching pointer field to nil; unknown keys are ignored.
-//
-// @param           s      "settings to mutate"
-//
-// @param           key    "one of syncInterval, debounce, gitexec"
-func clearGlobal(s *cfg.Settings, key string) {
-	switch key {
-	case "syncInterval":
-		s.SyncInterval = nil
-	case "debounce":
-		s.Debounce = nil
-	case "gitexec":
-		s.GitExec = nil
-	}
-}
-
-// @description    Returns the local raw value for key and whether it is set.
-//
-// localFieldString reads the matching pointer field and returns its string form; unset fields
-// return an empty string and false.
-//
-// @param           s        "settings to read"
-//
-// @param           key      "one of syncInterval, debounce, gitexec"
-//
-// @return          string   "raw value when set, empty otherwise"
-//
-// @return          bool     "true when the key is set"
-func localFieldString(s *cfg.Settings, key string) (string, bool) {
-	switch key {
-	case "syncInterval":
-		if s.SyncInterval != nil {
-			return strconv.Itoa(*s.SyncInterval), true
-		}
-	case "debounce":
-		if s.Debounce != nil {
-			return strconv.Itoa(*s.Debounce), true
-		}
-	case "gitexec":
-		if s.GitExec != nil {
-			return *s.GitExec, true
-		}
-	}
-	return "", false
 }
 
 // @description    Returns the repository root for the current directory.

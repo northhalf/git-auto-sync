@@ -160,28 +160,66 @@ func WriteGlobalSettings(settings *Settings) (err error) {
 	return nil
 }
 
-// localSettingKeys maps each [auto-sync] key to the Settings field that holds its decoded value.
-// It is the single source of truth for the key names the local helpers read and write.
-var localSettingKeys = map[string]func(*Settings, string) error{
-	"syncInterval": func(s *Settings, v string) error {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return tracerr.Wrap(err)
-		}
-		s.SyncInterval = &n
-		return nil
+// SettingField accesses one Settings field through its configuration key.
+type SettingField struct {
+	// Decode parses a raw value and assigns it to the field.
+	Decode func(s *Settings, value string) error
+	// Clear resets the field to unset.
+	Clear func(s *Settings)
+	// Raw returns the field's stored string form and whether it is set.
+	Raw func(s *Settings) (string, bool)
+}
+
+// SettingKeys maps each configuration key to the accessors of the Settings field that holds its
+// value. It is the single source of truth for the key names the CLI and the local [auto-sync]
+// helpers read and write.
+var SettingKeys = map[string]SettingField{
+	"syncInterval": {
+		Decode: func(s *Settings, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return tracerr.Wrap(err)
+			}
+			s.SyncInterval = &n
+			return nil
+		},
+		Clear: func(s *Settings) { s.SyncInterval = nil },
+		Raw: func(s *Settings) (string, bool) {
+			if s.SyncInterval == nil {
+				return "", false
+			}
+			return strconv.Itoa(*s.SyncInterval), true
+		},
 	},
-	"debounce": func(s *Settings, v string) error {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return tracerr.Wrap(err)
-		}
-		s.Debounce = &n
-		return nil
+	"debounce": {
+		Decode: func(s *Settings, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return tracerr.Wrap(err)
+			}
+			s.Debounce = &n
+			return nil
+		},
+		Clear: func(s *Settings) { s.Debounce = nil },
+		Raw: func(s *Settings) (string, bool) {
+			if s.Debounce == nil {
+				return "", false
+			}
+			return strconv.Itoa(*s.Debounce), true
+		},
 	},
-	"gitexec": func(s *Settings, v string) error {
-		s.GitExec = &v
-		return nil
+	"gitexec": {
+		Decode: func(s *Settings, v string) error {
+			s.GitExec = &v
+			return nil
+		},
+		Clear: func(s *Settings) { s.GitExec = nil },
+		Raw: func(s *Settings) (string, bool) {
+			if s.GitExec == nil {
+				return "", false
+			}
+			return *s.GitExec, true
+		},
 	},
 }
 
@@ -209,12 +247,12 @@ func ReadLocalSettings(repoPath string) (*Settings, error) {
 
 	section := cfg.Raw.Section("auto-sync")
 	settings := &Settings{}
-	for key, decode := range localSettingKeys {
+	for key, field := range SettingKeys {
 		value := section.Option(key)
 		if value == "" {
 			continue
 		}
-		if err := decode(settings, value); err != nil {
+		if err := field.Decode(settings, value); err != nil {
 			return nil, tracerr.Wrap(err)
 		}
 	}
@@ -234,7 +272,7 @@ func ReadLocalSettings(repoPath string) (*Settings, error) {
 //
 // @return          error     "nil on success, or an error opening, updating, or persisting the config"
 func SetLocalSetting(repoPath, key, value string) error {
-	if _, ok := localSettingKeys[key]; !ok {
+	if _, ok := SettingKeys[key]; !ok {
 		return tracerr.Errorf("unknown auto-sync key: %s", key)
 	}
 
@@ -263,7 +301,7 @@ func SetLocalSetting(repoPath, key, value string) error {
 //
 // @return          error     "nil on success, or an error opening, updating, or persisting the config"
 func UnsetLocalSetting(repoPath, key string) error {
-	if _, ok := localSettingKeys[key]; !ok {
+	if _, ok := SettingKeys[key]; !ok {
 		return tracerr.Errorf("unknown auto-sync key: %s", key)
 	}
 
