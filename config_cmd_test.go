@@ -42,7 +42,20 @@ func runConfigIn(t *testing.T, args ...string) (string, error) {
 	app := &cli.App{
 		Writer:    &out,
 		ErrWriter: &out,
-		Commands:  []*cli.Command{configCommand()},
+		Commands: []*cli.Command{
+			{
+				Name:  "config",
+				Usage: "Get, set, or unset git-auto-sync settings",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "global", Usage: "Operate on the global config.json"},
+					&cli.BoolFlag{Name: "local", Usage: "Operate on the repository's .git/config"},
+					&cli.BoolFlag{Name: "get", Usage: "Print the effective value of a key"},
+					&cli.BoolFlag{Name: "list", Aliases: []string{"l"}, Usage: "List all settings"},
+					&cli.BoolFlag{Name: "unset", Aliases: []string{"u"}, Usage: "Remove a key"},
+				},
+				Action: configCmd,
+			},
+		},
 	}
 	err := app.Run(append([]string{"git-auto-sync", "config"}, args...))
 	return out.String(), err

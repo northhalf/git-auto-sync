@@ -144,7 +144,18 @@ func main() {
 					return nil
 				},
 			},
-			configCommand(),
+			{
+				Name:  "config",
+				Usage: "Get, set, or unset git-auto-sync settings",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "global", Usage: "Operate on the global config.json"},
+					&cli.BoolFlag{Name: "local", Usage: "Operate on the repository's .git/config"},
+					&cli.BoolFlag{Name: "get", Usage: "Print the effective value of a key"},
+					&cli.BoolFlag{Name: "list", Aliases: []string{"l"}, Usage: "List all settings"},
+					&cli.BoolFlag{Name: "unset", Aliases: []string{"u"}, Usage: "Remove a key"},
+				},
+				Action: configCmd,
+			},
 			{
 				Name:    "daemon",
 				Aliases: []string{"d"},

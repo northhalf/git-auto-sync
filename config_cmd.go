@@ -14,28 +14,6 @@ import (
 // errConfigUsage signals a config command usage error.
 var errConfigUsage = errors.New("usage: git-auto-sync config [--global|--local] [--get|--list|--unset] <key> [value]")
 
-// @description    Returns the registered config command.
-//
-// configCommand builds the git-config-style command that dispatches get, set, unset, and list
-// operations across --global, --local, and the default effective scope using the internal/config
-// helpers.
-//
-// @return          *cli.Command  "configured config command registered on the CLI app"
-func configCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "config",
-		Usage: "Get, set, or unset git-auto-sync settings",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "global", Usage: "Operate on the global config.json"},
-			&cli.BoolFlag{Name: "local", Usage: "Operate on the repository's .git/config"},
-			&cli.BoolFlag{Name: "get", Usage: "Print the effective value of a key"},
-			&cli.BoolFlag{Name: "list", Aliases: []string{"l"}, Usage: "List all settings"},
-			&cli.BoolFlag{Name: "unset", Aliases: []string{"u"}, Usage: "Remove a key"},
-		},
-		Action: configCmd,
-	}
-}
-
 // @description    Dispatches the config command.
 //
 // configCmd resolves the scope from --global/--local, then dispatches --list, --unset, a two-arg
