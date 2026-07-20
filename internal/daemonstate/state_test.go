@@ -1,7 +1,6 @@
 package daemonstate
 
 import (
-	"reflect"
 	"testing"
 	"time"
 )
@@ -86,8 +85,18 @@ func Test_StateRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %#v, want %#v", got, want)
+	if len(got.Repos) != len(want.Repos) {
+		t.Fatalf("got %v, want %v", len(got.Repos), len(want.Repos))
+	}
+	for i := range want.Repos {
+		gotRepo, wantRepo := got.Repos[i], want.Repos[i]
+		// Compare instants with Time.Equal, not reflect.DeepEqual: read-back times round-trip
+		// through state.json and carry the UTC location, while want carries time.Local, and
+		// DeepEqual compares the Location pointer, which flakes under TZ=UTC.
+		if gotRepo.Repo != wantRepo.Repo || gotRepo.Status != wantRepo.Status || gotRepo.Stage != wantRepo.Stage ||
+			!gotRepo.UpdatedAt.Equal(wantRepo.UpdatedAt) || !gotRepo.LastSyncedAt.Equal(wantRepo.LastSyncedAt) {
+			t.Fatalf("got %#v, want %#v", gotRepo, wantRepo)
+		}
 	}
 }
 
