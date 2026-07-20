@@ -15,9 +15,9 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
-// configPollInterval controls how often the daemon and each watcher check the daemon configuration
-// file for changes. A removed repository stops being monitored within one interval, and an added
-// repository is picked up within one interval, without restarting the daemon.
+// configPollInterval controls how often the daemon checks the daemon configuration file for
+// changes. A removed repository's watcher is canceled within one interval, and an added repository
+// is picked up within one interval, without restarting the daemon.
 const configPollInterval = time.Minute
 
 // localChangePollInterval controls how often each watcher polls its .git/config for [auto-sync]
@@ -26,18 +26,19 @@ var localChangePollInterval = configPollInterval
 
 // watcherHandle tracks a running repository watcher through its done channel.
 type watcherHandle struct {
-	// done is closed when the watcher goroutine exits, either because the repository was removed
-	// from the daemon configuration or because the watcher returned.
+	// done is closed when the watcher goroutine exits, either because its context was canceled or
+	// because the watcher returned.
 	done <-chan struct{}
-	// cancel stops the watcher goroutine. RestartAll and watchForLocalChange use it to restart a
-	// watcher so its timing values are rebuilt from current settings.
+	// cancel stops the watcher goroutine. reconcile uses it when the repository leaves the daemon
+	// configuration, and RestartAll and watchForLocalChange use it to restart a watcher so its
+	// timing values are rebuilt from current settings.
 	cancel context.CancelFunc
 }
 
 // watcherManager owns the set of running repository watchers and reconciles it against the daemon
-// configuration. Removal is self-detected by each watcher (see startDaemonWatcher); the manager
-// starts watchers for newly added repositories and cleans up handles for watchers that have exited.
-// The recorder persists per-repository runtime status to state.json so the CLI can report it.
+// configuration: it cancels watchers whose repository left the configuration, starts watchers for
+// newly added repositories, and cleans up handles for watchers that have exited. The recorder
+// persists per-repository runtime status to state.json so the CLI can report it.
 type watcherManager struct {
 	mu       sync.Mutex
 	watchers map[string]*watcherHandle
@@ -63,11 +64,13 @@ func newWatcherManager() *watcherManager {
 
 // @description    Reconciles running watchers against the configuration.
 //
-// reconcile removes handles for watchers that have exited, then starts a watcher for every
-// repository in repos that is not already running. An unexpected exit forgets only the active
-// heartbeat so a replacement can recover the persisted LastSyncedAt; an exit after configuration
-// removal deletes the repository state. An already-running repository is left untouched, and an
-// exited repository is removed before restart, so two watchers never monitor one repository.
+// reconcile removes handles for watchers that have exited, cancels every watcher whose repository
+// is no longer listed, then starts a watcher for every repository in repos that is not already
+// running. A canceled watcher exits asynchronously and its handle is cleaned up on a later pass.
+// An unexpected exit forgets only the active heartbeat so a replacement can recover the persisted
+// LastSyncedAt; an exit after configuration removal deletes the repository state. An
+// already-running repository is left untouched, and an exited repository is removed before restart,
+// so two watchers never monitor one repository.
 //
 // @param           repos  "repository paths that should be monitored"
 //
@@ -87,7 +90,11 @@ func (m *watcherManager) reconcile(repos []string, envs []string) {
 					m.recorder.Remove(repo)
 				}
 			}
+			continue
 		default:
+		}
+		if !slices.Contains(repos, repo) {
+			handle.cancel()
 		}
 	}
 
@@ -102,9 +109,9 @@ func (m *watcherManager) reconcile(repos []string, envs []string) {
 // @description    Starts one repository watcher.
 //
 // startDaemonWatcher builds the repository configuration, applies the daemon's environment
-// entries, polls the daemon configuration until the repository is removed, and runs the watcher.
-// The watcher reports state transitions through onState so the manager can persist the repository's
-// runtime status. The returned handle's done channel is closed when the watcher goroutine exits.
+// entries, and runs the watcher until the manager cancels its context. The watcher reports state
+// transitions through onState so the manager can persist the repository's runtime status. The
+// returned handle's done channel is closed when the watcher goroutine exits.
 //
 // @param           repoPath  "path to the repository to watch"
 //
@@ -131,7 +138,6 @@ func (m *watcherManager) startDaemonWatcher(repoPath string, envs []string) *wat
 		// Daemon-level environment entries are captured at start time. A change to the daemon
 		// environment does not refresh a running watcher; remove and re-add the repository, or
 		// restart the daemon, to apply new environment entries to an existing repository.
-		go watchForRemoval(ctx, cancel, logger, repoPath)
 		go watchForLocalChange(ctx, cancel, logger, repoPath)
 
 		if err := watcher.WatchForChanges(ctx, logger, cfg, m.onState(repoPath)); err != nil {
@@ -175,53 +181,6 @@ func (m *watcherManager) onState(repoPath string) func(watcher.StateReport) {
 func (m *watcherManager) Heartbeat() {
 	if m.recorder != nil {
 		m.recorder.Heartbeat()
-	}
-}
-
-// @description    Cancels the watcher when its repository leaves the configuration.
-//
-// watchForRemoval polls the daemon configuration file's modification time and, when it changes,
-// re-reads the configuration and cancels the supplied context when the repository is no longer
-// listed. It returns when ctx is canceled, whether by itself or by the watcher exiting.
-//
-// @param           ctx       "context shared with the watcher; canceling it stops the watcher"
-//
-// @param           cancel    "cancellation function for ctx, called when the repository is removed"
-//
-// @param           logger    "repository-scoped logger"
-//
-// @param           repoPath  "path to the repository being watched"
-func watchForRemoval(ctx context.Context, cancel context.CancelFunc, logger *slog.Logger, repoPath string) {
-	ticker := time.NewTicker(configPollInterval)
-	defer ticker.Stop()
-
-	var lastMod time.Time
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			mod, err := config.GlobalSettingsModTime()
-			if err != nil {
-				logger.Error("read daemon config mtime failed", "error", err)
-				continue
-			}
-			if !mod.After(lastMod) {
-				continue
-			}
-			lastMod = mod
-
-			daemonConfig, err := config.ReadGlobalSettings()
-			if err != nil {
-				logger.Error("read daemon config failed", "error", err)
-				continue
-			}
-			if !slices.Contains(daemonConfig.Repos, repoPath) {
-				logger.Info("repository removed from daemon config, stopping watcher")
-				cancel()
-				return
-			}
-		}
 	}
 }
 
@@ -302,82 +261,4 @@ func (m *watcherManager) RestartAll() {
 		handle.cancel()
 	}
 	m.watchers = make(map[string]*watcherHandle)
-}
-
-// @description    Reports whether global settings changed.
-//
-// settingsChanged compares the three synchronization settings between two Settings. nil and nil is
-// unchanged. It ignores Repos and Envs, which the reconcile path handles separately.
-//
-// @param           a       "previous settings, or nil"
-//
-// @param           b       "current settings, or nil"
-//
-// @return          bool    "true if any of syncInterval, debounce, or gitexec differs"
-func settingsChanged(a, b *config.Settings) bool {
-	return intPtrChanged(a, b, func(s *config.Settings) *int { return s.SyncInterval }) ||
-		intPtrChanged(a, b, func(s *config.Settings) *int { return s.Debounce }) ||
-		strPtrChanged(a, b, func(s *config.Settings) *string { return s.GitExec })
-}
-
-// @description    Reports whether a *int field differs between two settings.
-//
-// intPtrChanged extracts the field via get from each settings and compares them, treating a nil
-// settings as a nil field.
-//
-// @param           a     "previous settings, or nil"
-//
-// @param           b     "current settings, or nil"
-//
-// @param           get   "accessor returning the field to compare"
-//
-// @return          bool  "true when the field differs or one side is nil"
-func intPtrChanged(a, b *config.Settings, get func(*config.Settings) *int) bool {
-	pa, pb := getOrNil(a, get), getOrNil(b, get)
-	if pa == nil && pb == nil {
-		return false
-	}
-	if pa == nil || pb == nil {
-		return true
-	}
-	return *pa != *pb
-}
-
-// @description    Reports whether a *string field differs between two settings.
-//
-// strPtrChanged extracts the field via get from each settings and compares them, treating a nil
-// settings as a nil field.
-//
-// @param           a     "previous settings, or nil"
-//
-// @param           b     "current settings, or nil"
-//
-// @param           get   "accessor returning the field to compare"
-//
-// @return          bool  "true when the field differs or one side is nil"
-func strPtrChanged(a, b *config.Settings, get func(*config.Settings) *string) bool {
-	pa, pb := getOrNil(a, get), getOrNil(b, get)
-	if pa == nil && pb == nil {
-		return false
-	}
-	if pa == nil || pb == nil {
-		return true
-	}
-	return *pa != *pb
-}
-
-// @description    Returns a settings field or nil when settings is nil.
-//
-// getOrNil guards the accessor so callers can pass a nil settings without a separate nil check.
-//
-// @param           s    "settings to read, or nil"
-//
-// @param           get  "accessor returning the field"
-//
-// @return          *T   "field value, or nil when s is nil"
-func getOrNil[T any](s *config.Settings, get func(*config.Settings) *T) *T {
-	if s == nil {
-		return nil
-	}
-	return get(s)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,8 +37,9 @@ func newFakeStart() *fakeStart {
 
 // @description    Records a start request and returns a non-real handle.
 //
-// start appends the call to the fake's history and returns a handle whose done channel stays open
-// until close is called for that repository.
+// start appends the call to the fake's history and returns a handle whose done channel closes when
+// close is called for that repository or the handle's cancel function is invoked, mirroring a real
+// watcher exiting on cancellation.
 //
 // @param           repo            "repository path passed to start"
 //
@@ -48,7 +50,8 @@ func (f *fakeStart) start(repo string, envs []string) *watcherHandle {
 	f.started = append(f.started, fakeStartCall{repo: repo, envs: append([]string(nil), envs...)})
 	done := make(chan struct{})
 	f.handles[repo] = done
-	return &watcherHandle{done: done}
+	var once sync.Once
+	return &watcherHandle{done: done, cancel: func() { once.Do(func() { close(done) }) }}
 }
 
 // @description    Simulates a watcher exiting for the given repository.
@@ -62,11 +65,26 @@ func (f *fakeStart) close(repo string) {
 	}
 }
 
+// @description    Reports whether the fake watcher for repo has exited.
+//
+// @param           repo   "repository path whose done channel is inspected"
+//
+// @return          bool   "true when the watcher's done channel is closed"
+func (f *fakeStart) exited(repo string) bool {
+	select {
+	case <-f.handles[repo]:
+		return true
+	default:
+		return false
+	}
+}
+
 // @description    Verifies watcherManager reconciliation.
 //
 // Test_WatcherManagerReconcile verifies that reconcile starts a watcher for each configured
-// repository, does not duplicate running watchers, cleans up exited watchers, and starts a fresh
-// watcher for a repository that is re-added after its previous watcher exited.
+// repository, does not duplicate running watchers, cancels a watcher whose repository leaves the
+// configuration, cleans up exited watchers, and starts a fresh watcher for a repository that is
+// re-added after its previous watcher exited.
 //
 // @param           t   "test handle used for assertions"
 func Test_WatcherManagerReconcile(t *testing.T) {
@@ -80,12 +98,19 @@ func Test_WatcherManagerReconcile(t *testing.T) {
 	assert.Equal(t, fs.started[1].repo, "/b")
 	assert.DeepEqual(t, fs.started[0].envs, []string{"K=V"})
 
-	// Reconciling the same set starts nothing new.
+	// Reconciling the same set starts nothing new and cancels nothing.
 	mgr.reconcile([]string{"/a", "/b"}, []string{"K=V"})
 	assert.Equal(t, len(fs.started), 2)
+	assert.Assert(t, !fs.exited("/a"))
+	assert.Assert(t, !fs.exited("/b"))
 
-	// /b is removed from the config and its watcher exits: reconcile drops it without restarting.
-	fs.close("/b")
+	// /b is removed from the config: reconcile cancels its watcher without restarting anything.
+	mgr.reconcile([]string{"/a"}, []string{"K=V"})
+	assert.Equal(t, len(fs.started), 2)
+	assert.Assert(t, fs.exited("/b"))
+	assert.Assert(t, !fs.exited("/a"))
+
+	// The canceled /b handle is cleaned up on the next pass.
 	mgr.reconcile([]string{"/a"}, []string{"K=V"})
 	assert.Equal(t, len(fs.started), 2)
 
@@ -94,33 +119,15 @@ func Test_WatcherManagerReconcile(t *testing.T) {
 	assert.Equal(t, len(fs.started), 3)
 	assert.Equal(t, fs.started[2].repo, "/b")
 
-	// /a removed from the config but still running: not cleaned up and not restarted.
-	mgr.reconcile([]string{}, []string{"K=V"})
+	// /a removed from the config: reconcile cancels it; /b keeps running.
+	mgr.reconcile([]string{"/b"}, []string{"K=V"})
 	assert.Equal(t, len(fs.started), 3)
+	assert.Assert(t, fs.exited("/a"))
+	assert.Assert(t, !fs.exited("/b"))
 
-	// /a's watcher now exits: reconcile cleans it up; nothing is started.
-	fs.close("/a")
-	mgr.reconcile([]string{}, []string{"K=V"})
+	// Next pass cleans /a up; nothing is started.
+	mgr.reconcile([]string{"/b"}, []string{"K=V"})
 	assert.Equal(t, len(fs.started), 3)
-}
-
-// @description    Verifies settingsChanged detects field changes.
-//
-// Test_SettingsChanged verifies that equal settings report unchanged, and any one changed field
-// reports changed.
-//
-// @param           t   "test handle used for assertions"
-func Test_SettingsChanged(t *testing.T) {
-	a := 60
-	b := 10
-	gitA := "/usr/bin/git"
-	base := &config.Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}
-	assert.Assert(t, !settingsChanged(base, &config.Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}))
-	assert.Assert(t, settingsChanged(base, &config.Settings{SyncInterval: ptrInt(120), Debounce: &b, GitExec: &gitA}))
-	assert.Assert(t, settingsChanged(base, &config.Settings{SyncInterval: &a, Debounce: ptrInt(20), GitExec: &gitA}))
-	assert.Assert(t, settingsChanged(base, &config.Settings{SyncInterval: &a, Debounce: &b, GitExec: ptrStr("/opt/git")}))
-	assert.Assert(t, !settingsChanged(nil, nil))
-	assert.Assert(t, settingsChanged(base, nil))
 }
 
 // @description    Verifies RestartAll cancels every handle and clears the map.
@@ -159,20 +166,6 @@ func Test_RestartAll(t *testing.T) {
 		}
 	}
 }
-
-// @description    Returns a pointer to n.
-//
-// @param           n      "value to point at"
-//
-// @return          *int   "pointer to n"
-func ptrInt(n int) *int { return &n }
-
-// @description    Returns a pointer to s.
-//
-// @param           s         "value to point at"
-//
-// @return          *string   "pointer to s"
-func ptrStr(s string) *string { return &s }
 
 // @description    Verifies watchForLocalChange restarts only on [auto-sync] change.
 //

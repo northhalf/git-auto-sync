@@ -27,9 +27,9 @@ func (d *Daemon) Start(s service.Service) error {
 //
 // run reads the daemon configuration, starts a watcher per repository, then polls the
 // configuration file for changes and reconciles the running watchers: added repositories are
-// started and removed repositories self-terminate. When the global synchronization settings
-// (syncInterval, debounce, gitexec) change, every watcher is restarted so it picks up the new
-// values. It panics if the initial configuration load fails and logs, rather than panics on,
+// started and removed repositories have their watchers canceled. When the global synchronization
+// settings (syncInterval, debounce, gitexec) change, every watcher is restarted so it picks up the
+// new values. It panics if the initial configuration load fails and logs, rather than panics on,
 // subsequent read errors.
 func (d *Daemon) run() {
 	slog.Info("start daemon service")
@@ -64,7 +64,7 @@ func (d *Daemon) run() {
 				slog.Error("read daemon config failed", "error", err)
 				continue
 			}
-			if settingsChanged(lastSettings, cur) {
+			if config.LocalFingerprint(lastSettings) != config.LocalFingerprint(cur) {
 				slog.Info("global settings changed, restarting watchers")
 				mgr.RestartAll()
 			}
