@@ -29,7 +29,7 @@ type Service struct {
 
 // isNotInstalled reports whether err is the kardianos not-installed error. kardianos signals a
 // missing service via an error message rather than a sentinel, so the string check is centralized
-// here for Status, Enable, and EnsureRunning.
+// here for Status and EnsureRunning.
 func isNotInstalled(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "the service is not installed")
 }
@@ -86,65 +86,13 @@ func windowsUserEnvVars() map[string]string {
 	return envVars
 }
 
-// @description    Installs and starts the daemon service.
-//
-// Enable stops a running daemon service, installs it, and starts it. When installation reports an
-// existing init entry, it attempts an uninstall and reinstall but ignores errors from those
-// recovery operations.
-//
-// @return          error  "nil on completion, or a status, stop, non-recoverable install, or start error"
-func (srv Service) Enable() error {
-	s := srv.Service
-
-	status, err := s.Status()
-	if err != nil {
-		if !isNotInstalled(err) {
-			return tracerr.Wrap(err)
-		}
-	}
-
-	stopped := false
-	if status == service.StatusRunning {
-		err := s.Stop()
-		if err != nil {
-			return tracerr.Wrap(err)
-		}
-		stopped = true
-	}
-
-	err = s.Install()
-	if err != nil {
-		if strings.Contains(err.Error(), "Init already exists") {
-			slog.Info("service init entry already exists; reinstalling git-auto-sync-daemon")
-			_ = s.Uninstall()
-			_ = s.Install()
-		} else {
-			return tracerr.Wrap(err)
-		}
-	} else {
-		logStep("Installing git-auto-sync as a daemon")
-	}
-
-	if stopped {
-		logStep("Restarting git-auto-sync-daemon")
-	} else {
-		logStep("Starting git-auto-sync-daemon")
-	}
-
-	err = s.Start()
-	if err != nil {
-		return tracerr.Wrap(err)
-	}
-
-	return nil
-}
-
 // @description    Starts the daemon service only when it is not already running.
 //
 // EnsureRunning starts the daemon when it is installed but stopped, and installs and starts it
-// when it is not installed. When the service is already running, it does nothing so that a
-// running daemon picks up configuration changes through its reload poller instead of being
-// restarted.
+// when it is not installed. When installation reports an existing init entry, it attempts an
+// uninstall and reinstall but ignores errors from those recovery operations. When the service is
+// already running, it does nothing so that a running daemon picks up configuration changes through
+// its reload poller instead of being restarted.
 //
 // @return          error  "nil on success or when already running, or an error querying, installing, or starting the service"
 func (srv Service) EnsureRunning() error {
@@ -153,8 +101,20 @@ func (srv Service) EnsureRunning() error {
 		if !isNotInstalled(err) {
 			return tracerr.Wrap(err)
 		}
-		// Not installed: install and start via Enable, which stops nothing here.
-		return srv.Enable()
+		// Not installed: install and start.
+		if err := srv.Service.Install(); err != nil {
+			if strings.Contains(err.Error(), "Init already exists") {
+				slog.Info("service init entry already exists; reinstalling git-auto-sync-daemon")
+				_ = srv.Service.Uninstall()
+				_ = srv.Service.Install()
+			} else {
+				return tracerr.Wrap(err)
+			}
+		} else {
+			logStep("Installing git-auto-sync as a daemon")
+		}
+		logStep("Starting git-auto-sync-daemon")
+		return tracerr.Wrap(srv.Service.Start())
 	}
 
 	if status == service.StatusRunning {

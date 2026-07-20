@@ -143,45 +143,45 @@ func TestStatusPropagatesOtherErrors(t *testing.T) {
 	}
 }
 
-// @description    Verifies Enable logs install and start steps and returns nil when both succeed.
+// @description    Verifies EnsureRunning logs install and start steps and returns nil for a missing service.
 //
 // @param           t  "test handle used for assertions"
-func TestEnableLogsInstallAndStart(t *testing.T) {
+func TestEnsureRunningLogsInstallAndStart(t *testing.T) {
 	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
 
 	logs := captureSlog(t, func() {
-		if err := srv.Enable(); err != nil {
-			t.Fatalf("Enable returned error %v, want nil", err)
+		if err := srv.EnsureRunning(); err != nil {
+			t.Fatalf("EnsureRunning returned error %v, want nil", err)
 		}
 	})
 
 	for _, want := range []string{"Installing git-auto-sync as a daemon", "Starting git-auto-sync-daemon"} {
 		if !strings.Contains(logs, want) {
-			t.Fatalf("Enable logs = %q, want to contain %q", logs, want)
+			t.Fatalf("EnsureRunning logs = %q, want to contain %q", logs, want)
 		}
 	}
 }
 
-// @description    Verifies Enable logs the recovery attempt when installation reports an existing init entry.
+// @description    Verifies EnsureRunning logs the recovery attempt when installation reports an existing init entry.
 //
 // @param           t  "test handle used for assertions"
-func TestEnableLogsReinstallRecovery(t *testing.T) {
+func TestEnsureRunningLogsReinstallRecovery(t *testing.T) {
 	srv := Service{Service: &fakeService{
 		statusErr:  errors.New("the service is not installed"),
 		installErr: errors.New("Init already exists"),
 	}}
 
 	logs := captureSlog(t, func() {
-		if err := srv.Enable(); err != nil {
-			t.Fatalf("Enable returned error %v, want nil", err)
+		if err := srv.EnsureRunning(); err != nil {
+			t.Fatalf("EnsureRunning returned error %v, want nil", err)
 		}
 	})
 
 	if !strings.Contains(logs, "reinstalling git-auto-sync-daemon") {
-		t.Fatalf("Enable logs = %q, want to contain the reinstall recovery message", logs)
+		t.Fatalf("EnsureRunning logs = %q, want to contain the reinstall recovery message", logs)
 	}
 	if !strings.Contains(logs, "Starting git-auto-sync-daemon") {
-		t.Fatalf("Enable logs = %q, want to contain the start message", logs)
+		t.Fatalf("EnsureRunning logs = %q, want to contain the start message", logs)
 	}
 }
 
