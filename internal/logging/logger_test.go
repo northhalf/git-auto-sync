@@ -126,12 +126,9 @@ func TestSetupLoggerWithPathWritesDebugToFile(t *testing.T) {
 	restoreDefaultLogger(t)
 	logPath := filepath.Join(t.TempDir(), "nested", "git-auto-sync.log")
 
-	logger, logCloser, err := setupLoggerWithPathAndOutput(false, logPath, io.Discard)
-	if err != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil", err)
-	}
+	logger, logCloser := setupLoggerWithPath(false, logPath)
 	if logCloser == nil {
-		t.Fatal("setupLoggerWithPathAndOutput() closer is nil")
+		t.Fatal("setupLoggerWithPath() closer is nil")
 	}
 	t.Cleanup(func() {
 		if closeErr := logCloser.Close(); closeErr != nil {
@@ -224,12 +221,9 @@ func TestSetupLoggerWithPathCreatesOwnerOnlyLogFile(t *testing.T) {
 	restoreDefaultLogger(t)
 	logPath := filepath.Join(t.TempDir(), "git-auto-sync.log")
 
-	_, logCloser, err := setupLoggerWithPathAndOutput(false, logPath, io.Discard)
-	if err != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil", err)
-	}
+	_, logCloser := setupLoggerWithPath(false, logPath)
 	if logCloser == nil {
-		t.Fatal("setupLoggerWithPathAndOutput() closer is nil")
+		t.Fatal("setupLoggerWithPath() closer is nil")
 	}
 	t.Cleanup(func() {
 		if closeErr := logCloser.Close(); closeErr != nil {
@@ -263,12 +257,9 @@ func TestSetupLoggerWithPathRestrictsExistingLogFile(t *testing.T) {
 		t.Fatalf("Chmod(%q) error = %v", logPath, err)
 	}
 
-	_, logCloser, err := setupLoggerWithPathAndOutput(false, logPath, io.Discard)
-	if err != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil", err)
-	}
+	_, logCloser := setupLoggerWithPath(false, logPath)
 	if logCloser == nil {
-		t.Fatal("setupLoggerWithPathAndOutput() closer is nil")
+		t.Fatal("setupLoggerWithPath() closer is nil")
 	}
 	t.Cleanup(func() {
 		if closeErr := logCloser.Close(); closeErr != nil {
@@ -291,14 +282,19 @@ func TestSetupLoggerWithPathRestrictsExistingLogFile(t *testing.T) {
 func TestSetupLoggerWithPathDebugFansOutToFileAndStdout(t *testing.T) {
 	restoreDefaultLogger(t)
 	logPath := filepath.Join(t.TempDir(), "git-auto-sync.log")
-	var stdout bytes.Buffer
 
-	logger, logCloser, err := setupLoggerWithPathAndOutput(true, logPath, &stdout)
+	originalStdout := os.Stdout
+	t.Cleanup(func() { os.Stdout = originalStdout })
+	stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout-*.log")
 	if err != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil", err)
+		t.Fatalf("CreateTemp() error = %v", err)
 	}
+	t.Cleanup(func() { _ = stdoutFile.Close() })
+	os.Stdout = stdoutFile
+
+	logger, logCloser := setupLoggerWithPath(true, logPath)
 	if logCloser == nil {
-		t.Fatal("setupLoggerWithPathAndOutput() closer is nil")
+		t.Fatal("setupLoggerWithPath() closer is nil")
 	}
 	t.Cleanup(func() {
 		if closeErr := logCloser.Close(); closeErr != nil {
@@ -311,7 +307,11 @@ func TestSetupLoggerWithPathDebugFansOutToFileAndStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%q) error = %v", logPath, err)
 	}
-	for name, output := range map[string]string{"file": string(contents), "stdout": stdout.String()} {
+	stdoutContents, err := os.ReadFile(stdoutFile.Name())
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", stdoutFile.Name(), err)
+	}
+	for name, output := range map[string]string{"file": string(contents), "stdout": string(stdoutContents)} {
 		for _, substring := range []string{"level=DEBUG", "msg=\"fan-out record\"", "repo=example"} {
 			if !strings.Contains(output, substring) {
 				t.Errorf("%s output %q does not contain %q", name, output, substring)
@@ -338,17 +338,27 @@ func TestSetupLoggerWithPathDebugFallbackWritesStdout(t *testing.T) {
 	if err := os.WriteFile(parentFile, []byte("content"), 0o600); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", parentFile, err)
 	}
-	var stdout bytes.Buffer
-	logger, logCloser, setupErr := setupLoggerWithPathAndOutput(true, filepath.Join(parentFile, "git-auto-sync.log"), &stdout)
-	if setupErr != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil fallback", setupErr)
+
+	originalStdout := os.Stdout
+	t.Cleanup(func() { os.Stdout = originalStdout })
+	stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout-*.log")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
 	}
+	t.Cleanup(func() { _ = stdoutFile.Close() })
+	os.Stdout = stdoutFile
+
+	logger, logCloser := setupLoggerWithPath(true, filepath.Join(parentFile, "git-auto-sync.log"))
 	if logCloser != nil {
-		t.Fatal("setupLoggerWithPathAndOutput() fallback closer is nonnil")
+		t.Fatal("setupLoggerWithPath() fallback closer is nonnil")
 	}
 
 	logger.Debug("fallback record", "repo", "example")
-	output := stdout.String()
+	stdoutContents, err := os.ReadFile(stdoutFile.Name())
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", stdoutFile.Name(), err)
+	}
+	output := string(stdoutContents)
 	for _, substring := range []string{"level=DEBUG", "msg=\"fallback record\"", "repo=example"} {
 		if !strings.Contains(output, substring) {
 			t.Errorf("fallback stdout %q does not contain %q", output, substring)
@@ -374,20 +384,17 @@ func TestSetupLoggerWithPathFallsBackForUnusablePath(t *testing.T) {
 	}
 	os.Stderr = warningFile
 
-	logger, _, setupErr := setupLoggerWithPathAndOutput(false, filepath.Join(parentFile, "git-auto-sync.log"), io.Discard)
+	logger, _ := setupLoggerWithPath(false, filepath.Join(parentFile, "git-auto-sync.log"))
 	os.Stderr = originalStderr
 	if closeErr := warningFile.Close(); closeErr != nil {
 		t.Fatalf("closing captured stderr: %v", closeErr)
 	}
 
-	if setupErr != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil fallback", setupErr)
-	}
 	if logger == nil {
-		t.Fatal("setupLoggerWithPathAndOutput() fallback logger is nil")
+		t.Fatal("setupLoggerWithPath() fallback logger is nil")
 	}
 	if slog.Default() != logger {
-		t.Fatal("setupLoggerWithPathAndOutput() did not install fallback logger as default")
+		t.Fatal("setupLoggerWithPath() did not install fallback logger as default")
 	}
 	warning, err := os.ReadFile(warningFile.Name())
 	if err != nil {

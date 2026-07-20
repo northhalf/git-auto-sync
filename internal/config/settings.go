@@ -361,7 +361,7 @@ func Resolve(global, local *Settings) (syncInterval, debounce time.Duration, git
 
 // @description    Produces a stable fingerprint of the three synchronization settings.
 //
-// LocalFingerprint returns a comparable string that changes only when syncInterval, debounce, or
+// SyncSettingsFingerprint returns a comparable string that changes only when syncInterval, debounce, or
 // gitexec changes. The daemon's change detectors use it to avoid restarting watchers when unrelated
 // configuration content changes: the per-repository poller compares fingerprints of [auto-sync]
 // settings, and the global poller compares fingerprints of the daemon-wide settings.
@@ -369,7 +369,7 @@ func Resolve(global, local *Settings) (syncInterval, debounce time.Duration, git
 // @param           s       "settings to fingerprint, or nil"
 //
 // @return          string  "fingerprint of the three synchronization settings"
-func LocalFingerprint(s *Settings) string {
+func SyncSettingsFingerprint(s *Settings) string {
 	if s == nil {
 		s = &Settings{}
 	}

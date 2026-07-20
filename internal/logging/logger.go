@@ -27,7 +27,7 @@ const (
 //
 // @return          *slog.Logger  "configured logger"
 func SetupLogger(debug bool) *slog.Logger {
-	logger, _, _ := setupLoggerWithPathAndOutput(debug, defaultLogPath(cliLogFilename), os.Stdout)
+	logger, _ := setupLoggerWithPath(debug, defaultLogPath(cliLogFilename))
 	return logger
 }
 
@@ -41,74 +41,63 @@ func SetupLogger(debug bool) *slog.Logger {
 //
 // @return          *slog.Logger  "configured logger"
 func SetupDaemonLogger(debug bool) *slog.Logger {
-	logger, _, _ := setupLoggerWithPathAndOutput(debug, defaultLogPath(daemonLogFilename), os.Stdout)
+	logger, _ := setupLoggerWithPath(debug, defaultLogPath(daemonLogFilename))
 	return logger
 }
 
-// @description    Initializes the logger with injectable debug output and exposes file cleanup, set default logger.
+// @description    Initializes the logger at the given path, installs it as the default, and exposes file cleanup.
 //
-// setupLoggerWithPathAndOutput keeps production logger signatures stable while allowing tests to
-// close lumberjack's lazily opened file before temporary-directory cleanup.
+// setupLoggerWithPath keeps production logger signatures stable while allowing tests to
+// close lumberjack's lazily opened file before temporary-directory cleanup. Debug console output
+// always goes to stdout, and setup failures degrade to fallbackLogger instead of returning an
+// error.
 //
-// @param           debug        "when true, also emit logs to the debug output at DEBUG level"
+// @param           debug    "when true, also emit logs to stdout at DEBUG level"
 //
-// @param           logPath      "full path to the log file"
-//
-// @param           debugOutput  "destination used for debug console output"
+// @param           logPath  "full path to the log file"
 //
 // @return          *slog.Logger  "configured logger"
 //
 // @return          io.Closer     "file writer to close, or nil when setup falls back"
-//
-// @return          error         "always nil; setup failures degrade instead of returning an error"
-func setupLoggerWithPathAndOutput(debug bool, logPath string, debugOutput io.Writer) (*slog.Logger, io.Closer, error) {
+func setupLoggerWithPath(debug bool, logPath string) (*slog.Logger, io.Closer) {
 	logDir := filepath.Dir(logPath)
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("create log directory %q: %w", logDir, err), debugOutput)
-		return logger, nil, fallbackErr
+		return fallbackLogger(debug, fmt.Errorf("create log directory %q: %w", logDir, err)), nil
 	}
 
 	pathInfo, err := os.Lstat(logPath)
 	if err == nil {
 		if pathInfo.Mode()&os.ModeSymlink != 0 {
-			logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("log file %q is a symbolic link", logPath), debugOutput)
-			return logger, nil, fallbackErr
+			return fallbackLogger(debug, fmt.Errorf("log file %q is a symbolic link", logPath)), nil
 		}
 		if !pathInfo.Mode().IsRegular() {
-			logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("log file %q is not a regular file", logPath), debugOutput)
-			return logger, nil, fallbackErr
+			return fallbackLogger(debug, fmt.Errorf("log file %q is not a regular file", logPath)), nil
 		}
 	} else if !os.IsNotExist(err) {
-		logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("inspect log file %q: %w", logPath, err), debugOutput)
-		return logger, nil, fallbackErr
+		return fallbackLogger(debug, fmt.Errorf("inspect log file %q: %w", logPath, err)), nil
 	}
 
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("open log file %q: %w", logPath, err), debugOutput)
-		return logger, nil, fallbackErr
+		return fallbackLogger(debug, fmt.Errorf("open log file %q: %w", logPath, err)), nil
 	}
 	if runtime.GOOS != "windows" {
 		info, statErr := logFile.Stat()
 		if statErr != nil {
 			_ = logFile.Close()
-			logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("stat log file %q: %w", logPath, statErr), debugOutput)
-			return logger, nil, fallbackErr
+			return fallbackLogger(debug, fmt.Errorf("stat log file %q: %w", logPath, statErr)), nil
 		}
 		if !info.Mode().IsRegular() {
 			_ = logFile.Close()
-			logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("log file %q is not a regular file", logPath), debugOutput)
-			return logger, nil, fallbackErr
+			return fallbackLogger(debug, fmt.Errorf("log file %q is not a regular file", logPath)), nil
 		}
 		if chmodErr := logFile.Chmod(0o600); chmodErr != nil {
 			_ = logFile.Close()
-			logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("restrict log file %q permissions: %w", logPath, chmodErr), debugOutput)
-			return logger, nil, fallbackErr
+			return fallbackLogger(debug, fmt.Errorf("restrict log file %q permissions: %w", logPath, chmodErr)), nil
 		}
 	}
 	if err := logFile.Close(); err != nil {
-		logger, fallbackErr := fallbackLoggerWithOutput(debug, fmt.Errorf("close log file %q: %w", logPath, err), debugOutput)
-		return logger, nil, fallbackErr
+		return fallbackLogger(debug, fmt.Errorf("close log file %q: %w", logPath, err)), nil
 	}
 
 	fileWriter := &lumberjack.Logger{
@@ -121,35 +110,31 @@ func setupLoggerWithPathAndOutput(debug bool, logPath string, debugOutput io.Wri
 	handlerOptions := newHandlerOptions(debug)
 	handlers := []slog.Handler{slog.NewTextHandler(fileWriter, handlerOptions)}
 	if debug {
-		handlers = append(handlers, slog.NewTextHandler(debugOutput, handlerOptions))
+		handlers = append(handlers, slog.NewTextHandler(os.Stdout, handlerOptions))
 	}
 
 	logger := slog.New(&multiHandler{handlers: handlers})
 	slog.SetDefault(logger)
-	return logger, fileWriter, nil
+	return logger, fileWriter
 }
 
-// @description    Builds a degraded logger with an injectable debug output destination, set default logger.
+// @description    Builds a degraded logger that warns on stderr, set default logger.
 //
-// @param           debug        "when true, log to the debug output; otherwise discard logs"
+// @param           debug  "when true, log to stdout; otherwise discard logs"
 //
-// @param           err          "error that triggered fallback"
-//
-// @param           debugOutput  "destination used when debug logging is enabled"
+// @param           err    "error that triggered fallback"
 //
 // @return          *slog.Logger  "degraded logger"
-//
-// @return          error         "always nil"
-func fallbackLoggerWithOutput(debug bool, err error, debugOutput io.Writer) (*slog.Logger, error) {
+func fallbackLogger(debug bool, err error) *slog.Logger {
 	_, _ = fmt.Fprintf(os.Stderr, "warning: cannot open log file: %v\n", err)
 
 	output := io.Writer(io.Discard)
 	if debug {
-		output = debugOutput
+		output = os.Stdout
 	}
 	logger := slog.New(slog.NewTextHandler(output, newHandlerOptions(debug)))
 	slog.SetDefault(logger)
-	return logger, nil
+	return logger
 }
 
 // @description    Returns a logger with the repository path attached to every record.

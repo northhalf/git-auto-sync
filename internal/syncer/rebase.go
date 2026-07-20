@@ -27,13 +27,13 @@ func rebase(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	logger.Debug("starting rebase")
 
 	repoPath := repoConfig.RepoPath
-	bi, err := fetchBranchInfo(repoPath)
+	bi, err := readBranchInfo(repoPath)
 	if err != nil {
 		logger.Error("rebase failed", "operation", "read branch information", "error", err)
 		return err
 	}
 
-	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
+	if !bi.hasUpstream() {
 		logger.Info("rebase skipped", "reason", "no upstream")
 		return nil
 	}

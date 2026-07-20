@@ -154,7 +154,7 @@ func (c *IgnoreChecker) ShouldIgnore(filePath string) (bool, error) {
 		return true, nil
 	}
 
-	if relativePath == ".." || strings.HasPrefix(relativePath, "../") {
+	if outsideRepo {
 		return false, errors.New("file path is outside repository")
 	}
 	if relativePath == "." {

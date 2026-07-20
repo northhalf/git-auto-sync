@@ -10,6 +10,25 @@ import (
 
 var sendAlert = notification.Alert
 
+// @description    Sends a pause alert, tolerating headless systems.
+//
+// alertPaused sends a platform alert for a paused repository. A failed delivery is non-fatal: an
+// unavailable notification service is expected on headless systems and stays silent, while any
+// other failure is logged so daemon status still shows the real pause reason.
+//
+// @param           logger     "repository-scoped logger"
+//
+// @param           operation  "log message used when alert delivery fails"
+//
+// @param           title      "alert title"
+//
+// @param           body       "alert body text"
+func alertPaused(logger *slog.Logger, operation, title, body string) {
+	if err := sendAlert(title, body); err != nil && !errors.Is(err, notification.ErrUnavailable) {
+		logger.Warn(operation, "error", err)
+	}
+}
+
 // @description    Synchronizes a Git repository.
 //
 // AutoSync verifies that the repository is in a syncable state, verifies the Git author, commits
@@ -30,29 +49,25 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	logger.Debug("starting sync")
 
 	if err := checkRepoState(logger, repoConfig); err != nil {
-		if alertErr := sendAlert("Git Auto Sync - Paused", "Sync paused for - "+repoConfig.RepoPath+": "+err.Error()); alertErr != nil && !errors.Is(alertErr, notification.ErrUnavailable) {
-			// A failed platform alert is non-fatal. Log it but still report the blocking repo state so
-			// daemon status shows the real reason the repository paused.
-			logger.Warn("send repo state alert failed", "error", alertErr)
-		}
+		alertPaused(logger, "send repo state alert failed", "Git Auto Sync - Paused", "Sync paused for - "+repoConfig.RepoPath+": "+err.Error())
 		return newSyncError(repoStateStage(err), err)
 	}
 
 	if err := ensureGitAuthor(logger, repoConfig); err != nil {
-		return newSyncError(syncStageAuthor, err)
+		return newSyncError(SyncStageAuthor, err)
 	}
 
 	if err := commit(logger, repoConfig); err != nil {
-		return newSyncError(syncStageCommit, err)
+		return newSyncError(SyncStageCommit, err)
 	}
 
 	if err := fetch(logger, repoConfig); err != nil {
-		return newSyncError(syncStageFetch, err)
+		return newSyncError(SyncStageFetch, err)
 	}
 
 	state, err := resolveUpstreamState(logger, repoConfig)
 	if err != nil {
-		return newSyncError(syncStageCompare, err)
+		return newSyncError(SyncStageCompare, err)
 	}
 	logger.Info("sync state resolved", "state", state)
 
@@ -61,23 +76,18 @@ func AutoSync(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		// Nothing to rebase or push: HEAD has no upstream or already matches it.
 	case upstreamStateLocalAhead:
 		if err := push(logger, repoConfig); err != nil {
-			return newSyncError(syncStagePush, err)
+			return newSyncError(SyncStagePush, err)
 		}
 	case upstreamStateUpstreamAhead, upstreamStateDiverged:
 		if err := rebase(logger, repoConfig); err != nil {
 			if errors.Is(err, errRebaseFailed) {
-				repoPath := repoConfig.RepoPath
-				if alertErr := sendAlert("Git Auto Sync - Conflict", "Could not rebase for - "+repoPath); alertErr != nil && !errors.Is(alertErr, notification.ErrUnavailable) {
-					// A failed platform alert is non-fatal. Log it but still report the rebase
-					// conflict so daemon status shows the real reason the repository paused.
-					logger.Warn("send rebase conflict alert failed", "error", alertErr)
-				}
+				alertPaused(logger, "send rebase conflict alert failed", "Git Auto Sync - Conflict", "Could not rebase for - "+repoConfig.RepoPath)
 			}
-			return newSyncError(syncStageRebase, err)
+			return newSyncError(SyncStageRebase, err)
 		}
 		if state == upstreamStateDiverged {
 			if err := push(logger, repoConfig); err != nil {
-				return newSyncError(syncStagePush, err)
+				return newSyncError(SyncStagePush, err)
 			}
 		}
 	}

@@ -7,9 +7,9 @@ import (
 	"github.com/prashantgupta24/mac-sleep-notifier/notifier"
 )
 
-// AwakeNotifierDarwn forwards Darwin suspend-and-resume wake events from the system IOKit
+// AwakeNotifierDarwin forwards Darwin suspend-and-resume wake events from the system IOKit
 // notification source.
-type AwakeNotifierDarwn struct {
+type AwakeNotifierDarwin struct {
 	logger *slog.Logger
 	n      *notifier.Notifier
 }
@@ -17,18 +17,17 @@ type AwakeNotifierDarwn struct {
 // @description    Creates the Darwin wake notifier.
 //
 // NewAwakeNotifier creates a Darwin notifier backed by the system suspend-and-resume notification
-// source. The logger is retained for parity with the Linux and Windows notifiers but is unused
-// because construction never fails.
+// source.
 //
-// @param           logger  "repository-scoped logger retained for signature parity"
+// @param           logger  "repository-scoped logger used for startup diagnostics"
 //
-// @return          *AwakeNotifierDarwn  "notifier that reports system wake events"
+// @return          *AwakeNotifierDarwin  "notifier that reports system wake events"
 //
 // @return          error                "always nil"
-func NewAwakeNotifier(logger *slog.Logger) (*AwakeNotifierDarwn, error) {
+func NewAwakeNotifier(logger *slog.Logger) (*AwakeNotifierDarwin, error) {
 	n := notifier.GetInstance()
 
-	return &AwakeNotifierDarwn{logger: logger, n: n}, nil
+	return &AwakeNotifierDarwin{logger: logger, n: n}, nil
 }
 
 // @description    Forwards Darwin wake events until cancellation.
@@ -42,8 +41,11 @@ func NewAwakeNotifier(logger *slog.Logger) (*AwakeNotifierDarwn, error) {
 // @param           out    "channel that receives wake notifications"
 //
 // @return          error  "always nil after starting the forwarding goroutine"
-func (a *AwakeNotifierDarwn) Start(ctx context.Context, out chan<- bool) error {
+func (a *AwakeNotifierDarwin) Start(ctx context.Context, out chan<- bool) error {
 	suspendResumeNotifier := a.n.Start()
+	if a.logger != nil {
+		a.logger.Info("awake notifier started")
+	}
 
 	go func() {
 		for {

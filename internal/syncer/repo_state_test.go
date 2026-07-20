@@ -167,7 +167,7 @@ func Test_RepoStateStage(t *testing.T) {
 		{"busy", fmt.Errorf("%w: merge", errRepoBusy), "repo-busy"},
 		{"detached", errDetachedHead, "detached-head"},
 		{"no-upstream", errNoUpstream, "no-upstream"},
-		{"other", errors.New("boom"), syncStageRepoState},
+		{"other", errors.New("boom"), SyncStageRepoState},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

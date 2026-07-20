@@ -22,13 +22,13 @@ import (
 func fetch(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	logger.Debug("starting fetch")
 
-	bi, err := fetchBranchInfo(repoConfig.RepoPath)
+	bi, err := readBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		logger.Error("fetch failed", "operation", "read branch information", "error", err)
 		return err
 	}
 
-	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
+	if !bi.hasUpstream() {
 		logger.Info("fetch skipped", "reason", "no upstream")
 		return nil
 	}

@@ -110,7 +110,7 @@ func (m *watcherManager) reconcile(repos []string, envs []string) {
 //
 // startDaemonWatcher builds the repository configuration, applies the daemon's environment
 // entries, and runs the watcher until the manager cancels its context. The watcher reports state
-// transitions through onState so the manager can persist the repository's runtime status. The
+// transitions through stateReporter so the manager can persist the repository's runtime status. The
 // returned handle's done channel is closed when the watcher goroutine exits.
 //
 // @param           repoPath  "path to the repository to watch"
@@ -140,7 +140,7 @@ func (m *watcherManager) startDaemonWatcher(repoPath string, envs []string) *wat
 		// restart the daemon, to apply new environment entries to an existing repository.
 		go watchForLocalChange(ctx, cancel, logger, repoPath)
 
-		if err := watcher.WatchForChanges(ctx, logger, cfg, m.onState(repoPath)); err != nil {
+		if err := watcher.WatchForChanges(ctx, logger, cfg, m.stateReporter(repoPath)); err != nil {
 			logger.Error("watcher exited with error", "error", err)
 		}
 	}()
@@ -150,14 +150,14 @@ func (m *watcherManager) startDaemonWatcher(repoPath string, envs []string) *wat
 
 // @description    Builds a watcher state callback for a repository.
 //
-// onState returns a callback that records repoPath's runtime status through the manager's recorder.
+// stateReporter returns a callback that records repoPath's runtime status through the manager's recorder.
 // It returns nil when the manager has no recorder, so tests that override start with a fake run
 // unchanged and the watcher skips reporting.
 //
 // @param           repoPath  "path to the repository whose status is recorded"
 //
 // @return          func(watcher.StateReport)  "state callback, or nil when no recorder is configured"
-func (m *watcherManager) onState(repoPath string) func(watcher.StateReport) {
+func (m *watcherManager) stateReporter(repoPath string) func(watcher.StateReport) {
 	recorder := m.recorder
 	if recorder == nil {
 		return nil
@@ -187,7 +187,7 @@ func (m *watcherManager) Heartbeat() {
 // @description    Restarts the watcher when its repository [auto-sync] settings change.
 //
 // watchForLocalChange polls <repo>/.git/config's modification time every localChangePollInterval.
-// When the mtime changes, it reads the [auto-sync] settings and compares LocalFingerprint against
+// When the mtime changes, it reads the [auto-sync] settings and compares SyncSettingsFingerprint against
 // the last fingerprint. Only a fingerprint change cancels the watcher context, so routine fetch,
 // rebase, and commit activity that rewrites other .git/config sections does not trigger a restart.
 // The first observation establishes the baseline fingerprint without canceling, so a repository
@@ -231,7 +231,7 @@ func watchForLocalChange(ctx context.Context, cancel context.CancelFunc, logger 
 				logger.Error("read local settings failed", "error", err)
 				continue
 			}
-			fp := config.LocalFingerprint(local)
+			fp := config.SyncSettingsFingerprint(local)
 			if !initialized {
 				// First observation: establish the baseline fingerprint without canceling.
 				lastFingerprint = fp

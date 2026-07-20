@@ -19,9 +19,6 @@ var errNoGitAuthorName = errors.New("missing git author name")
 // configuration from the current process environment.
 var authorEnvMutex sync.Mutex
 
-// authorEnvLogger carries the caller's logger into setAuthorEnv without changing its signature.
-var authorEnvLogger *slog.Logger
-
 // @description    Validates Git author identity.
 //
 // ensureGitAuthor verifies that Git user.email and user.name are set without logging either value,
@@ -48,11 +45,8 @@ func ensureGitAuthor(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	authorEnvMutex.Lock()
 	defer authorEnvMutex.Unlock()
 
-	authorEnvLogger = logger
-	defer func() { authorEnvLogger = nil }()
-
 	// Replace system environment variables with repository environment variables
-	restore := setAuthorEnv(envMap)
+	restore := setAuthorEnv(logger, envMap)
 	defer func() {
 		if err := restore(); err != nil {
 			logger.Warn("failed to restore git author environment", "error", err)
@@ -105,10 +99,12 @@ func envMapFromSlice(env []string) map[string]string {
 // returned function restores the original values and must be called after the caller finishes
 // loading configuration from the process environment.
 //
+// @param           logger  "repository-scoped logger for environment mutation failures"
+//
 // @param           envMap  "environment overrides from repository configuration"
 //
 // @return          func() error  "function that restores the original environment values; returns any restoration error"
-func setAuthorEnv(envMap map[string]string) func() error {
+func setAuthorEnv(logger *slog.Logger, envMap map[string]string) func() error {
 	vars := []string{"HOME", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL"}
 	type envState struct {
 		value string
@@ -125,12 +121,12 @@ func setAuthorEnv(envMap map[string]string) func() error {
 
 		if explicit, ok := envMap[v]; ok {
 			if explicit == "" {
-				if err := os.Unsetenv(v); err != nil && authorEnvLogger != nil {
-					authorEnvLogger.Warn("failed to unset author config env", "key", v, "error", err)
+				if err := os.Unsetenv(v); err != nil {
+					logger.Warn("failed to unset author config env", "key", v, "error", err)
 				}
 			} else {
-				if err := os.Setenv(v, explicit); err != nil && authorEnvLogger != nil {
-					authorEnvLogger.Warn("failed to set author config env", "key", v, "error", err)
+				if err := os.Setenv(v, explicit); err != nil {
+					logger.Warn("failed to set author config env", "key", v, "error", err)
 				}
 			}
 		}

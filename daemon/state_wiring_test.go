@@ -8,26 +8,26 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
-// setupDaemonState points XDG_CONFIG_HOME and HOME at a temporary directory so the manager's recorder
+// setupDaemstateReporter points XDG_CONFIG_HOME and HOME at a temporary directory so the manager's recorder
 // writes state.json to an isolated location.
-func setupDaemonState(t *testing.T) {
+func setupDaemstateReporter(t *testing.T) {
 	t.Helper()
 	newConfigDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", newConfigDir)
 	t.Setenv("HOME", newConfigDir)
 }
 
-// @description    Verifies onState records watcher transitions.
+// @description    Verifies stateReporter records watcher transitions.
 //
-// Test_OnStateRecordsTransitions verifies that the callback built by onState records a running
+// Test_StateReporterRecordsTransitions verifies that the callback built by stateReporter records a running
 // report and then a paused report with the failed stage, persisting the latest status to state.json.
 //
 // @param           t  "test handle used for isolated state setup and assertions"
-func Test_OnStateRecordsTransitions(t *testing.T) {
-	setupDaemonState(t)
+func Test_StateReporterRecordsTransitions(t *testing.T) {
+	setupDaemstateReporter(t)
 	m := newWatcherManager()
 
-	cb := m.onState("/repo")
+	cb := m.stateReporter("/repo")
 	if cb == nil {
 		t.Fatalf("assertion failed: cb != nil")
 	}
@@ -53,30 +53,30 @@ func Test_OnStateRecordsTransitions(t *testing.T) {
 	}
 }
 
-// @description    Verifies onState returns nil without a recorder.
+// @description    Verifies stateReporter returns nil without a recorder.
 //
-// Test_OnStateNilWithoutRecorder verifies that a manager with no recorder returns a nil callback so
+// Test_StateReporterNilWithoutRecorder verifies that a manager with no recorder returns a nil callback so
 // the watcher skips reporting, keeping test doubles that override start unchanged.
 //
 // @param           t  "test handle used for assertions"
-func Test_OnStateNilWithoutRecorder(t *testing.T) {
+func Test_StateReporterNilWithoutRecorder(t *testing.T) {
 	m := &watcherManager{watchers: make(map[string]*watcherHandle)}
-	if m.onState("/repo") != nil {
-		t.Fatalf("assertion failed: m.onState(\"/repo\") == nil")
+	if m.stateReporter("/repo") != nil {
+		t.Fatalf("assertion failed: m.stateReporter(\"/repo\") == nil")
 	}
 }
 
 // @description    Verifies Heartbeat refreshes persisted timestamps.
 //
 // Test_HeartbeatRefreshesState verifies that Heartbeat bumps a repository's UpdatedAt past the value
-// recorded by an earlier onState report.
+// recorded by an earlier stateReporter report.
 //
 // @param           t  "test handle used for isolated state setup and assertions"
 func Test_HeartbeatRefreshesState(t *testing.T) {
-	setupDaemonState(t)
+	setupDaemstateReporter(t)
 	m := newWatcherManager()
 
-	m.onState("/repo")(watcher.StateReport{Paused: false})
+	m.stateReporter("/repo")(watcher.StateReport{Paused: false})
 	before, err := daemonstate.ReadState()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -102,7 +102,7 @@ func Test_HeartbeatRefreshesState(t *testing.T) {
 //
 // @param           t  "test handle used for isolated state setup and assertions"
 func Test_ReconcileRemovesStateOnExit(t *testing.T) {
-	setupDaemonState(t)
+	setupDaemstateReporter(t)
 	fs := newFakeStart()
 	m := &watcherManager{
 		watchers: make(map[string]*watcherHandle),
@@ -133,7 +133,7 @@ func Test_ReconcileRemovesStateOnExit(t *testing.T) {
 //
 // @param           t  "test handle used for isolated state setup and assertions"
 func Test_ReconcilePreservesStateOnWatcherRestart(t *testing.T) {
-	setupDaemonState(t)
+	setupDaemstateReporter(t)
 	fs := newFakeStart()
 	m := &watcherManager{
 		watchers: make(map[string]*watcherHandle),
@@ -181,7 +181,7 @@ func Test_ReconcilePreservesStateOnWatcherRestart(t *testing.T) {
 //
 // @param           t  "test handle used for isolated state setup and assertions"
 func Test_ReconcileRemovesForgottenStateAfterConfigRemoval(t *testing.T) {
-	setupDaemonState(t)
+	setupDaemstateReporter(t)
 	fs := newFakeStart()
 	m := &watcherManager{
 		watchers: make(map[string]*watcherHandle),

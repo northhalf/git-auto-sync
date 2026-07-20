@@ -17,6 +17,7 @@ import (
 	cfg "github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/northhalf/git-auto-sync/internal/daemonservice"
 	"github.com/northhalf/git-auto-sync/internal/daemonstate"
+	"github.com/northhalf/git-auto-sync/internal/syncer"
 	"github.com/urfave/cli/v2"
 )
 
@@ -42,6 +43,15 @@ func (cliDaemon) Start(service.Service) error { return nil }
 // @return          error            "always nil"
 func (cliDaemon) Stop(service.Service) error { return nil }
 
+// @description    Builds the daemon service handle for CLI service management.
+//
+// @return          daemonservice.Service  "service handle backed by the platform service manager"
+//
+// @return          error                  "nil on success, or a service construction error"
+func newCLIDaemonService() (daemonservice.Service, error) {
+	return daemonservice.NewServiceWithDaemon(cliDaemon{})
+}
+
 // @description    Prints daemon status and repositories.
 //
 // daemonStatus queries the service status, prints a message for running, stopped, and not-installed
@@ -53,7 +63,7 @@ func (cliDaemon) Stop(service.Service) error { return nil }
 //
 // @return          error  "nil on success, or an error from the service or configuration"
 func daemonStatus(ctx *cli.Context) error {
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return err
 	}
@@ -74,19 +84,13 @@ func daemonStatus(ctx *cli.Context) error {
 		// No user-facing message for an unknown status.
 	}
 
-	settings, err := cfg.ReadGlobalSettings()
-	if err != nil {
-		return err
-	}
-
-	state, err := daemonstate.ReadState()
+	settings, state, err := readReposAndState()
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Monitoring - ")
-	now := time.Now()
-	printRepos(os.Stdout, settings.Repos, state, now, "  ")
+	printRepos(os.Stdout, settings.Repos, state, time.Now(), "  ")
 
 	return nil
 }
@@ -102,7 +106,7 @@ func daemonStatus(ctx *cli.Context) error {
 //
 // @return          error  "nil on success, or an error building, querying, installing, or starting the service"
 func daemonRun(ctx *cli.Context) error {
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return err
 	}
@@ -138,7 +142,7 @@ func daemonRun(ctx *cli.Context) error {
 //
 // @return          error  "nil on success, or an error building, querying, or stopping the service"
 func daemonStop(ctx *cli.Context) error {
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return err
 	}
@@ -176,7 +180,7 @@ func daemonStop(ctx *cli.Context) error {
 //
 // @return          error  "nil on success or when not installed, or an error querying, stopping, or starting the service"
 func daemonRestart(ctx *cli.Context) error {
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return err
 	}
@@ -205,7 +209,7 @@ func daemonRestart(ctx *cli.Context) error {
 //
 // @return          error  "nil on success or when not installed, or an error building, querying, or disabling the service"
 func daemonUninstall(ctx *cli.Context) error {
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return err
 	}
@@ -242,24 +246,39 @@ func daemonUninstall(ctx *cli.Context) error {
 //
 // @return          error  "nil on success, or an error reading the configuration or state"
 func daemonList(ctx *cli.Context) error {
-	settings, err := cfg.ReadGlobalSettings()
-	if err != nil {
-		return err
-	}
-
-	state, err := daemonstate.ReadState()
+	settings, state, err := readReposAndState()
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("daemon:", daemonServiceStatus())
-	now := time.Now()
 	if len(settings.Repos) == 0 {
 		fmt.Println("No repository be added")
 		return nil
 	}
-	printRepos(os.Stdout, settings.Repos, state, now, "")
+	printRepos(os.Stdout, settings.Repos, state, time.Now(), "")
 	return nil
+}
+
+// @description    Reads the daemon configuration and runtime state together.
+//
+// @return          *cfg.Settings       "daemon configuration with monitored repositories"
+//
+// @return          *daemonstate.State  "daemon runtime state"
+//
+// @return          error               "nil on success, or a configuration or state read error"
+func readReposAndState() (*cfg.Settings, *daemonstate.State, error) {
+	settings, err := cfg.ReadGlobalSettings()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	state, err := daemonstate.ReadState()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return settings, state, nil
 }
 
 // @description    Returns a short daemon service status label.
@@ -270,7 +289,7 @@ func daemonList(ctx *cli.Context) error {
 //
 // @return          string  "short daemon service status label"
 func daemonServiceStatus() string {
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return "unknown"
 	}
@@ -291,6 +310,32 @@ func daemonServiceStatus() string {
 	}
 }
 
+// @description    Looks up a repository's daemon state entry.
+//
+// findRepoEntry returns the fresh state entry for repoPath, or nil when the entry is missing or
+// stale, since a stale or absent entry carries no trustworthy runtime status.
+//
+// @param           state     "daemon state read from state.json"
+//
+// @param           repoPath  "repository path to look up"
+//
+// @param           now       "reference time for staleness, typically the current time"
+//
+// @return          *daemonstate.RepoStatus  "matching fresh entry, or nil when missing or stale"
+func findRepoEntry(state *daemonstate.State, repoPath string, now time.Time) *daemonstate.RepoStatus {
+	for i := range state.Repos {
+		r := &state.Repos[i]
+		if r.Repo != repoPath {
+			continue
+		}
+		if r.IsStale(now) {
+			return nil
+		}
+		return r
+	}
+	return nil
+}
+
 // @description    Returns the human-readable status label of a repository.
 //
 // repoStatus looks up repoPath in the daemon state and returns "running", "paused (<reason>)", or
@@ -306,19 +351,14 @@ func daemonServiceStatus() string {
 //
 // @return          string    "human-readable repository status label"
 func repoStatus(repoPath string, state *daemonstate.State, now time.Time) string {
-	for _, r := range state.Repos {
-		if r.Repo != repoPath {
-			continue
-		}
-		if r.IsStale(now) {
-			return "unknown (daemon may not be running)"
-		}
-		if r.Status == daemonstate.StatusPaused {
-			return "paused (" + reasonForStage(r.Stage) + ")"
-		}
-		return "running"
+	r := findRepoEntry(state, repoPath, now)
+	if r == nil {
+		return "unknown (daemon may not be running)"
 	}
-	return "unknown (daemon may not be running)"
+	if r.Status == daemonstate.StatusPaused {
+		return "paused (" + reasonForStage(r.Stage) + ")"
+	}
+	return "running"
 }
 
 // @description    Returns the last-sync segment for a repository.
@@ -335,16 +375,11 @@ func repoStatus(repoPath string, state *daemonstate.State, now time.Time) string
 //
 // @return          string    "formatted last-sync segment, or empty when the entry is stale or missing"
 func repoLastSynced(repoPath string, state *daemonstate.State, now time.Time) string {
-	for _, r := range state.Repos {
-		if r.Repo != repoPath {
-			continue
-		}
-		if r.IsStale(now) {
-			return ""
-		}
-		return formatLastSynced(r.LastSyncedAt, now)
+	r := findRepoEntry(state, repoPath, now)
+	if r == nil {
+		return ""
 	}
-	return ""
+	return formatLastSynced(r.LastSyncedAt, now)
 }
 
 // @description    Formats a last-sync time for display.
@@ -488,19 +523,19 @@ func printRepos(w io.Writer, repos []string, state *daemonstate.State, now time.
 // @return          string  "human-readable reason"
 func reasonForStage(stage string) string {
 	switch stage {
-	case "rebase":
+	case syncer.SyncStageRebase:
 		return "rebase conflict"
-	case "author":
+	case syncer.SyncStageAuthor:
 		return "git author not configured"
-	case "commit":
+	case syncer.SyncStageCommit:
 		return "commit failed"
-	case "compare":
+	case syncer.SyncStageCompare:
 		return "upstream comparison failed"
-	case "repo-busy":
+	case syncer.SyncStageRepoBusy:
 		return "git operation in progress (rebase/merge/...)"
-	case "detached-head":
+	case syncer.SyncStageDetachedHead:
 		return "HEAD is detached"
-	case "no-upstream":
+	case syncer.SyncStageNoUpstream:
 		return "branch has no upstream"
 	default:
 		return "unknown error"
@@ -545,7 +580,7 @@ func daemonAdd(ctx *cli.Context) error {
 		return err
 	}
 
-	s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+	s, err := newCLIDaemonService()
 	if err != nil {
 		return err
 	}
@@ -603,7 +638,7 @@ func daemonRm(ctx *cli.Context) error {
 	}
 
 	if len(settings.Repos) == 0 {
-		s, err := daemonservice.NewServiceWithDaemon(cliDaemon{})
+		s, err := newCLIDaemonService()
 		if err != nil {
 			return err
 		}

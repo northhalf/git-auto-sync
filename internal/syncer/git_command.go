@@ -12,36 +12,8 @@ import (
 	"strings"
 
 	"github.com/northhalf/git-auto-sync/internal/config"
+	"github.com/northhalf/git-auto-sync/internal/termux"
 )
-
-// @description    Builds the Git subprocess command for the current platform.
-//
-// On Android (Termux), Git ships as a static PIE without a PT_INTERP segment, so the
-// kernel refuses a direct execve (permission denied). termux-exec works around this for
-// shell-launched processes by wrapping the exec through the dynamic linker (linker64);
-// Go binaries built with CGO_ENABLED=0 bypass termux-exec and execve directly, so do the
-// same wrap here: invoke linker64 with the Git path as its program argument. On other
-// platforms, exec Git directly.
-//
-// @param           cmd       "Git executable name or path"
-//
-// @param           gitArgs   "arguments to pass to Git, including the -c globals"
-//
-// @return          *exec.Cmd "configured command ready to run"
-func newGitCmd(cmd string, gitArgs []string) *exec.Cmd {
-	if runtime.GOOS == "android" {
-		if linker, err := os.Executable(); err == nil && filepath.Base(linker) == "linker64" {
-			gitPath := cmd
-			if !filepath.IsAbs(gitPath) {
-				if resolved, err := exec.LookPath(gitPath); err == nil {
-					gitPath = resolved
-				}
-			}
-			return exec.Command(linker, append([]string{gitPath}, gitArgs...)...)
-		}
-	}
-	return exec.Command(cmd, gitArgs...)
-}
 
 // @description    Runs a Git subprocess.
 //
@@ -88,19 +60,24 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 	}
 	gitArgs = append(gitArgs, args...)
 
-	statusCmd := newGitCmd(cmd, gitArgs)
-	statusCmd.Dir = repoConfig.RepoPath
-	statusCmd.Stdout = &outb
-	statusCmd.Stderr = &errb
-	statusCmd.Env = toEnvString(repoConfig)
-	err := statusCmd.Run()
+	var gitCmd *exec.Cmd
+	if runtime.GOOS == "android" {
+		gitCmd = termux.Command(cmd, gitArgs...)
+	} else {
+		gitCmd = exec.Command(cmd, gitArgs...)
+	}
+	gitCmd.Dir = repoConfig.RepoPath
+	gitCmd.Stdout = &outb
+	gitCmd.Stderr = &errb
+	gitCmd.Env = buildGitEnv(repoConfig)
+	err := gitCmd.Run()
 
 	if err != nil {
 		fullCmd := cmd + " " + strings.Join(gitArgs, " ")
 		// Expose only environment keys, not values, so secrets such as tokens or agent sockets
 		// passed through repoConfig.Env or the inherited parent environment never reach logs.
-		keys := make([]string, 0, len(statusCmd.Env))
-		for _, e := range statusCmd.Env {
+		keys := make([]string, 0, len(gitCmd.Env))
+		for _, e := range gitCmd.Env {
 			k, _, _ := strings.Cut(e, "=")
 			keys = append(keys, k)
 		}
@@ -113,7 +90,7 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 
 // @description    Builds the Git subprocess environment.
 //
-// toEnvString inherits the full parent environment so Git receives SSH_AUTH_SOCK, PATH,
+// buildGitEnv inherits the full parent environment so Git receives SSH_AUTH_SOCK, PATH,
 // XDG_CONFIG_HOME, GIT_* and any other variable it relies on, then layers explicit per-repo
 // entries on top so configured values override inherited ones. Entries are sorted for stable
 // command-error output.
@@ -121,7 +98,7 @@ func gitCommand(logger *slog.Logger, repoConfig config.RepoConfig, args []string
 // @param           repoConfig  "repository configuration containing explicit environment entries"
 //
 // @return          []string    "environment entries for the Git subprocess"
-func toEnvString(repoConfig config.RepoConfig) []string {
+func buildGitEnv(repoConfig config.RepoConfig) []string {
 	env := envMapFromSlice(os.Environ())
 	for k, v := range envMapFromSlice(repoConfig.Env) {
 		env[k] = v

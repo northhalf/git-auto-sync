@@ -27,7 +27,7 @@ func newServiceBackend(daemon service.Interface) (serviceBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	executablePath := filepath.Join(filepath.Dir(ex), "git-auto-sync-daemon")
+	executablePath := filepath.Join(filepath.Dir(ex), daemonServiceName)
 	if runtime.GOOS == "windows" {
 		executablePath += ".exe"
 	}
@@ -38,7 +38,7 @@ func newServiceBackend(daemon service.Interface) (serviceBackend, error) {
 	}
 
 	config := &service.Config{
-		Name:         "git-auto-sync-daemon",
+		Name:         daemonServiceName,
 		DisplayName:  "Git Auto Sync Daemon",
 		Description:  "Background Process for Auto Syncing Git Repos",
 		Executable:   executablePath,

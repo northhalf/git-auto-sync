@@ -85,7 +85,7 @@ func TestWindowsUserEnvVarsOmitsEmpties(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestStatusNotInstalledReturnsSentinel(t *testing.T) {
-	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
+	srv := Service{backend: &fakeService{statusErr: errors.New("the service is not installed")}}
 
 	status, err := srv.Status()
 
@@ -110,7 +110,7 @@ func TestStatusKnownStatesReturnStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := Service{Service: &fakeService{status: tt.status}}
+			srv := Service{backend: &fakeService{status: tt.status}}
 
 			status, err := srv.Status()
 
@@ -128,7 +128,7 @@ func TestStatusKnownStatesReturnStatus(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestStatusPropagatesOtherErrors(t *testing.T) {
-	srv := Service{Service: &fakeService{statusErr: errors.New("permission denied")}}
+	srv := Service{backend: &fakeService{statusErr: errors.New("permission denied")}}
 
 	status, err := srv.Status()
 
@@ -147,7 +147,7 @@ func TestStatusPropagatesOtherErrors(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestEnsureRunningLogsInstallAndStart(t *testing.T) {
-	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
+	srv := Service{backend: &fakeService{statusErr: errors.New("the service is not installed")}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.EnsureRunning(); err != nil {
@@ -166,7 +166,7 @@ func TestEnsureRunningLogsInstallAndStart(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestEnsureRunningLogsReinstallRecovery(t *testing.T) {
-	srv := Service{Service: &fakeService{
+	srv := Service{backend: &fakeService{
 		statusErr:  errors.New("the service is not installed"),
 		installErr: errors.New("Init already exists"),
 	}}
@@ -189,7 +189,7 @@ func TestEnsureRunningLogsReinstallRecovery(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestStopLogsStopOnly(t *testing.T) {
-	srv := Service{Service: &fakeService{}}
+	srv := Service{backend: &fakeService{}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Stop(); err != nil {
@@ -209,7 +209,7 @@ func TestStopLogsStopOnly(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestStopPropagatesError(t *testing.T) {
-	srv := Service{Service: &fakeService{stopErr: errors.New("stop failed")}}
+	srv := Service{backend: &fakeService{stopErr: errors.New("stop failed")}}
 
 	err := srv.Stop()
 
@@ -222,7 +222,7 @@ func TestStopPropagatesError(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestDisableLogsStopAndUninstall(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusRunning}}
+	srv := Service{backend: &fakeService{status: service.StatusRunning}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Disable(); err != nil {
@@ -241,7 +241,7 @@ func TestDisableLogsStopAndUninstall(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestDisableStoppedSkipsStop(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusStopped}}
+	srv := Service{backend: &fakeService{status: service.StatusStopped}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Disable(); err != nil {
@@ -261,7 +261,7 @@ func TestDisableStoppedSkipsStop(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestDisableNotInstalledReturnsNil(t *testing.T) {
-	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
+	srv := Service{backend: &fakeService{statusErr: errors.New("the service is not installed")}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Disable(); err != nil {
@@ -278,7 +278,7 @@ func TestDisableNotInstalledReturnsNil(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestDisablePropagatesStopError(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusRunning, stopErr: errors.New("stop failed")}}
+	srv := Service{backend: &fakeService{status: service.StatusRunning, stopErr: errors.New("stop failed")}}
 
 	if err := srv.Disable(); err == nil {
 		t.Fatal("Disable err = nil, want an error")
@@ -289,7 +289,7 @@ func TestDisablePropagatesStopError(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestDisablePropagatesUninstallError(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusStopped, uninstallErr: errors.New("uninstall failed")}}
+	srv := Service{backend: &fakeService{status: service.StatusStopped, uninstallErr: errors.New("uninstall failed")}}
 
 	if err := srv.Disable(); err == nil {
 		t.Fatal("Disable err = nil, want an error")
@@ -300,7 +300,7 @@ func TestDisablePropagatesUninstallError(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestRestartRunningStopsAndStarts(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusRunning}}
+	srv := Service{backend: &fakeService{status: service.StatusRunning}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Restart(); err != nil {
@@ -319,7 +319,7 @@ func TestRestartRunningStopsAndStarts(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestRestartStoppedStartsOnly(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusStopped}}
+	srv := Service{backend: &fakeService{status: service.StatusStopped}}
 
 	logs := captureSlog(t, func() {
 		if err := srv.Restart(); err != nil {
@@ -339,7 +339,7 @@ func TestRestartStoppedStartsOnly(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestRestartNotInstalledReturnsSentinel(t *testing.T) {
-	srv := Service{Service: &fakeService{statusErr: errors.New("the service is not installed")}}
+	srv := Service{backend: &fakeService{statusErr: errors.New("the service is not installed")}}
 
 	err := srv.Restart()
 
@@ -352,7 +352,7 @@ func TestRestartNotInstalledReturnsSentinel(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestRestartPropagatesStopError(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusRunning, stopErr: errors.New("stop failed")}}
+	srv := Service{backend: &fakeService{status: service.StatusRunning, stopErr: errors.New("stop failed")}}
 
 	if err := srv.Restart(); err == nil {
 		t.Fatal("Restart err = nil, want an error")
@@ -363,7 +363,7 @@ func TestRestartPropagatesStopError(t *testing.T) {
 //
 // @param           t  "test handle used for assertions"
 func TestRestartPropagatesStartError(t *testing.T) {
-	srv := Service{Service: &fakeService{status: service.StatusRunning, startErr: errors.New("start failed")}}
+	srv := Service{backend: &fakeService{status: service.StatusRunning, startErr: errors.New("start failed")}}
 
 	if err := srv.Restart(); err == nil {
 		t.Fatal("Restart err = nil, want an error")

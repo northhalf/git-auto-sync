@@ -44,13 +44,13 @@ const (
 //
 // @return          error         "nil on success, or an error reading branch info or Git refs"
 func resolveUpstreamState(logger *slog.Logger, repoConfig config.RepoConfig) (upstreamState, error) {
-	bi, err := fetchBranchInfo(repoConfig.RepoPath)
+	bi, err := readBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		logger.Error("resolve upstream state failed", "operation", "read branch information", "error", err)
 		return "", err
 	}
 
-	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
+	if !bi.hasUpstream() {
 		return upstreamStateNone, nil
 	}
 

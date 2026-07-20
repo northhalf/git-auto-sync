@@ -64,7 +64,7 @@ func (d *Daemon) run() {
 				slog.Error("read daemon config failed", "error", err)
 				continue
 			}
-			if config.LocalFingerprint(lastSettings) != config.LocalFingerprint(cur) {
+			if config.SyncSettingsFingerprint(lastSettings) != config.SyncSettingsFingerprint(cur) {
 				slog.Info("global settings changed, restarting watchers")
 				mgr.RestartAll()
 			}

@@ -80,6 +80,9 @@ func (a *AwakeNotifierLinux) Start(ctx context.Context, out chan<- bool) error {
 		a.conn = nil
 		return nil
 	}
+	if a.logger != nil {
+		a.logger.Info("awake notifier started")
+	}
 
 	signals := make(chan *dbus.Signal, 16)
 	a.conn.Signal(signals)

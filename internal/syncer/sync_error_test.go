@@ -68,8 +68,8 @@ func Test_AutoSyncClassifiesAuthorFailure(t *testing.T) {
 	}
 
 	err := AutoSync(slog.Default(), cfg)
-	if SyncErrorStage(err) != syncStageAuthor {
-		t.Fatalf("got %v, want %v", SyncErrorStage(err), syncStageAuthor)
+	if SyncErrorStage(err) != SyncStageAuthor {
+		t.Fatalf("got %v, want %v", SyncErrorStage(err), SyncStageAuthor)
 	}
 	if !errors.Is(err, errNoGitAuthorEmail) {
 		t.Fatalf("assertion failed: errors.Is(err, errNoGitAuthorEmail)")
@@ -100,8 +100,8 @@ func Test_AutoSyncClassifiesFetchFailure(t *testing.T) {
 	}
 
 	err := AutoSync(slog.Default(), cfg)
-	if SyncErrorStage(err) != syncStageFetch {
-		t.Fatalf("got %v, want %v", SyncErrorStage(err), syncStageFetch)
+	if SyncErrorStage(err) != SyncStageFetch {
+		t.Fatalf("got %v, want %v", SyncErrorStage(err), SyncStageFetch)
 	}
 	if !IsRemoteSyncError(err) {
 		t.Fatalf("assertion failed: IsRemoteSyncError(err)")

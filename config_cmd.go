@@ -148,19 +148,10 @@ func configGet(ctx *cli.Context, key string) error {
 		return nil
 	}
 
-	global, err := cfg.ReadGlobalSettings()
+	sync, debounce, gitExec, err := effectiveSettings()
 	if err != nil {
 		return err
 	}
-	local := &cfg.Settings{}
-	repoPath, repoErr := currentRepoPath()
-	if repoErr == nil {
-		local, err = cfg.ReadLocalSettings(repoPath)
-		if err != nil {
-			return err
-		}
-	}
-	sync, debounce, gitExec := cfg.Resolve(global, local)
 	switch key {
 	case "syncInterval":
 		_, _ = fmt.Fprintln(ctx.App.Writer, int(sync/time.Minute))
@@ -180,23 +171,43 @@ func configGet(ctx *cli.Context, key string) error {
 //
 // @return          error   "nil on success, or a storage error"
 func configList(ctx *cli.Context) error {
-	global, err := cfg.ReadGlobalSettings()
+	sync, debounce, gitExec, err := effectiveSettings()
 	if err != nil {
 		return err
+	}
+	_, _ = fmt.Fprintln(ctx.App.Writer, "syncInterval="+strconv.Itoa(int(sync/time.Minute)))
+	_, _ = fmt.Fprintln(ctx.App.Writer, "debounce="+strconv.Itoa(int(debounce/time.Minute)))
+	_, _ = fmt.Fprintln(ctx.App.Writer, "gitexec="+gitExec)
+	return nil
+}
+
+// @description    Resolves the effective synchronization settings.
+//
+// effectiveSettings reads the global settings, merges repository-local settings when the working
+// directory is inside a repository, and resolves the effective values.
+//
+// @return          time.Duration  "effective sync interval"
+//
+// @return          time.Duration  "effective debounce"
+//
+// @return          string         "effective git executable"
+//
+// @return          error          "nil on success, or a storage error"
+func effectiveSettings() (time.Duration, time.Duration, string, error) {
+	global, err := cfg.ReadGlobalSettings()
+	if err != nil {
+		return 0, 0, "", err
 	}
 	local := &cfg.Settings{}
 	repoPath, repoErr := currentRepoPath()
 	if repoErr == nil {
 		local, err = cfg.ReadLocalSettings(repoPath)
 		if err != nil {
-			return err
+			return 0, 0, "", err
 		}
 	}
 	sync, debounce, gitExec := cfg.Resolve(global, local)
-	_, _ = fmt.Fprintln(ctx.App.Writer, "syncInterval="+strconv.Itoa(int(sync/time.Minute)))
-	_, _ = fmt.Fprintln(ctx.App.Writer, "debounce="+strconv.Itoa(int(debounce/time.Minute)))
-	_, _ = fmt.Fprintln(ctx.App.Writer, "gitexec="+gitExec)
-	return nil
+	return sync, debounce, gitExec, nil
 }
 
 // @description    Removes a setting at the resolved scope.
@@ -265,8 +276,7 @@ func parseValue(key, value string) (string, error) {
 
 // @description    Returns the repository root for the current directory.
 //
-// currentRepoPath gets the working directory and validates it as a Git repository. It is a thin
-// wrapper around isValidGitRepo so config_cmd_test can substitute repository discovery.
+// currentRepoPath gets the working directory and validates it as a Git repository.
 //
 // @return          string   "absolute path to the repository root"
 //

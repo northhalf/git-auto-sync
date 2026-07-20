@@ -19,7 +19,7 @@ func TestToEnvStringDoesNotDuplicateConfiguredEntries(t *testing.T) {
 	cfg := config.RepoConfig{Env: []string{"TOKEN=value", "COMPLEX=a=b"}}
 	original := slices.Clone(cfg.Env)
 
-	env := toEnvString(cfg)
+	env := buildGitEnv(cfg)
 
 	for _, entry := range original {
 		count := 0
@@ -44,7 +44,7 @@ func TestToEnvStringDoesNotDuplicateConfiguredEntries(t *testing.T) {
 func TestToEnvStringIncludesHome(t *testing.T) {
 	t.Setenv("HOME", "/tmp/git-auto-sync-home")
 
-	env := toEnvString(config.RepoConfig{})
+	env := buildGitEnv(config.RepoConfig{})
 	if !slices.Contains(env, "HOME=/tmp/git-auto-sync-home") {
 		t.Fatalf("expected HOME in environment, got %v", env)
 	}
@@ -56,7 +56,7 @@ func TestToEnvStringIncludesHome(t *testing.T) {
 func TestToEnvStringInheritsParentEnvironment(t *testing.T) {
 	t.Setenv("GIT_AUTO_SYNC_TEST_VAR", "inherited")
 
-	env := toEnvString(config.RepoConfig{})
+	env := buildGitEnv(config.RepoConfig{})
 	if !slices.Contains(env, "GIT_AUTO_SYNC_TEST_VAR=inherited") {
 		t.Fatalf("expected inherited parent variable, got %v", env)
 	}
@@ -69,7 +69,7 @@ func TestToEnvStringOverridesInheritedEntries(t *testing.T) {
 	t.Setenv("GIT_AUTO_SYNC_TEST_VAR", "inherited")
 
 	cfg := config.RepoConfig{Env: []string{"GIT_AUTO_SYNC_TEST_VAR=explicit"}}
-	env := toEnvString(cfg)
+	env := buildGitEnv(cfg)
 
 	if !slices.Contains(env, "GIT_AUTO_SYNC_TEST_VAR=explicit") {
 		t.Fatalf("expected configured override, got %v", env)

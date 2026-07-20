@@ -133,12 +133,14 @@ func (a *AwakeNotifierWindows) Start(ctx context.Context, out chan<- bool) error
 		callback: windows.NewCallback(deviceNotifyCallbackRoutine(callback)),
 	}
 	handle, err := registerSuspendResumeNotificationWrap(&params, deviceNotifyCallback)
-	a.logger.Info("register suspend resume notification")
 	if err != nil {
 		if a.logger != nil {
 			a.logger.Info("awake notifier disabled", "reason", "register suspend-resume failed", "error", err)
 		}
 		return nil
+	}
+	if a.logger != nil {
+		a.logger.Info("awake notifier started")
 	}
 
 	go func() {

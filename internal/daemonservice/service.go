@@ -23,7 +23,7 @@ type serviceBackend interface {
 }
 
 type Service struct {
-	Service serviceBackend
+	backend serviceBackend
 }
 
 // isNotInstalled reports whether err is the kardianos not-installed error. kardianos signals a
@@ -44,11 +44,11 @@ func isNotInstalled(err error) bool {
 //
 // @return          error    "nil on success, or an error resolving the executable or creating the service"
 func NewServiceWithDaemon(daemon service.Interface) (Service, error) {
-	backend, err := newServiceBackend(daemon)
+	b, err := newServiceBackend(daemon)
 	if err != nil {
 		return Service{}, err
 	}
-	return Service{Service: backend}, nil
+	return Service{backend: b}, nil
 }
 
 // @description    Collects the Windows user profile environment for the service process.
@@ -95,17 +95,17 @@ func windowsUserEnvVars() map[string]string {
 //
 // @return          error  "nil on success or when already running, or an error querying, installing, or starting the service"
 func (srv Service) EnsureRunning() error {
-	status, err := srv.Service.Status()
+	status, err := srv.backend.Status()
 	if err != nil {
 		if !isNotInstalled(err) {
 			return err
 		}
 		// Not installed: install and start.
-		if err := srv.Service.Install(); err != nil {
+		if err := srv.backend.Install(); err != nil {
 			if strings.Contains(err.Error(), "Init already exists") {
 				slog.Info("service init entry already exists; reinstalling git-auto-sync-daemon")
-				_ = srv.Service.Uninstall()
-				_ = srv.Service.Install()
+				_ = srv.backend.Uninstall()
+				_ = srv.backend.Install()
 			} else {
 				return err
 			}
@@ -113,7 +113,7 @@ func (srv Service) EnsureRunning() error {
 			logStep("Installing git-auto-sync as a daemon")
 		}
 		logStep("Starting git-auto-sync-daemon")
-		return srv.Service.Start()
+		return srv.backend.Start()
 	}
 
 	if status == service.StatusRunning {
@@ -121,7 +121,7 @@ func (srv Service) EnsureRunning() error {
 	}
 
 	logStep("Starting git-auto-sync-daemon")
-	return srv.Service.Start()
+	return srv.backend.Start()
 }
 
 // @description    Stops the daemon service without uninstalling it.
@@ -133,7 +133,7 @@ func (srv Service) EnsureRunning() error {
 // @return          error  "nil on success, or a wrapped error from the stop operation"
 func (srv Service) Stop() error {
 	logStep("Stopping git-auto-sync-daemon")
-	if err := srv.Service.Stop(); err != nil {
+	if err := srv.backend.Stop(); err != nil {
 		return err
 	}
 
@@ -160,7 +160,7 @@ func (srv Service) Restart() error {
 	}
 
 	logStep("Restarting git-auto-sync-daemon")
-	return srv.Service.Start()
+	return srv.backend.Start()
 }
 
 // @description    Disable stops and uninstalls the daemon user service.
@@ -182,13 +182,13 @@ func (srv Service) Disable() error {
 
 	if status == service.StatusRunning {
 		logStep("Stopping git-auto-sync-daemon")
-		if err := srv.Service.Stop(); err != nil {
+		if err := srv.backend.Stop(); err != nil {
 			return err
 		}
 	}
 
 	logStep("Uninstalling git-auto-sync as a daemon")
-	if err := srv.Service.Uninstall(); err != nil {
+	if err := srv.backend.Uninstall(); err != nil {
 		return err
 	}
 
@@ -205,7 +205,7 @@ func (srv Service) Disable() error {
 //
 // @return          error            "ErrNotInstalled when the service is not installed, a wrapped error for other query failures, or nil on success"
 func (srv Service) Status() (service.Status, error) {
-	status, err := srv.Service.Status()
+	status, err := srv.backend.Status()
 	if err != nil {
 		if isNotInstalled(err) {
 			return service.StatusUnknown, ErrNotInstalled

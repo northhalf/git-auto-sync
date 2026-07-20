@@ -1,12 +1,13 @@
 package daemonstate
 
 import (
+	"os"
 	"testing"
 	"time"
 )
 
-// setupState points XDG_CONFIG_HOME and HOME at a temporary directory so StateFile, ReadState, and
-// WriteState target an isolated state.json.
+// setupState points XDG_CONFIG_HOME and HOME at a temporary directory so stateFile, ReadState, and
+// writeState target an isolated state.json.
 func setupState(t *testing.T) {
 	t.Helper()
 	newConfigDir := t.TempDir()
@@ -35,36 +36,6 @@ func Test_StateReadEmpty(t *testing.T) {
 	}
 }
 
-// @description    Verifies the state file modification time.
-//
-// Test_StateModTime verifies that the modification time is the zero time when no state file exists
-// and a non-zero time after state is written.
-//
-// @param           t  "test handle used for isolated setup and assertions"
-func Test_StateModTime(t *testing.T) {
-	setupState(t)
-
-	mod, err := StateModTime()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !mod.IsZero() {
-		t.Fatalf("assertion failed: mod.IsZero()")
-	}
-
-	if err := WriteState(&State{Repos: []RepoStatus{{Repo: "/repo", Status: StatusRunning}}}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	mod, err = StateModTime()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if mod.IsZero() {
-		t.Fatalf("assertion failed: !mod.IsZero()")
-	}
-}
-
 // @description    Verifies state round-trips through the file.
 //
 // Test_StateRoundTrip writes a state with two repositories and reads back an equal value.
@@ -77,7 +48,7 @@ func Test_StateRoundTrip(t *testing.T) {
 		{Repo: "/repo/a", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0), LastSyncedAt: time.Unix(1500, 0)},
 		{Repo: "/repo/b", Status: StatusPaused, Stage: "rebase", UpdatedAt: time.Unix(2000, 0)},
 	}}
-	if err := WriteState(want); err != nil {
+	if err := writeState(want); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -100,16 +71,16 @@ func Test_StateRoundTrip(t *testing.T) {
 	}
 }
 
-// @description    Verifies WriteState sorts repositories by path.
+// @description    Verifies writeState sorts repositories by path.
 //
-// Test_WriteStateSortsRepos writes a state with repositories out of order and verifies the persisted
+// Test_writeStateSortsRepos writes a state with repositories out of order and verifies the persisted
 // file lists them sorted by path, so output is stable across writes.
 //
 // @param           t  "test handle used for isolated setup and assertions"
-func Test_WriteStateSortsRepos(t *testing.T) {
+func Test_writeStateSortsRepos(t *testing.T) {
 	setupState(t)
 
-	if err := WriteState(&State{Repos: []RepoStatus{
+	if err := writeState(&State{Repos: []RepoStatus{
 		{Repo: "/z", Status: StatusRunning},
 		{Repo: "/a", Status: StatusRunning},
 		{Repo: "/m", Status: StatusRunning},
@@ -135,21 +106,21 @@ func Test_WriteStateSortsRepos(t *testing.T) {
 	}
 }
 
-// @description    Verifies WriteState overwrites existing content.
+// @description    Verifies writeState overwrites existing content.
 //
-// Test_WriteStateOverwrites writes one repository, then writes a different set, and verifies the
+// Test_writeStateOverwrites writes one repository, then writes a different set, and verifies the
 // second write fully replaced the first.
 //
 // @param           t  "test handle used for isolated setup and assertions"
-func Test_WriteStateOverwrites(t *testing.T) {
+func Test_writeStateOverwrites(t *testing.T) {
 	setupState(t)
 
-	if err := WriteState(&State{Repos: []RepoStatus{
+	if err := writeState(&State{Repos: []RepoStatus{
 		{Repo: "/old", Status: StatusRunning},
 	}}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if err := WriteState(&State{Repos: []RepoStatus{
+	if err := writeState(&State{Repos: []RepoStatus{
 		{Repo: "/new", Status: StatusPaused, Stage: "author"},
 	}}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -234,12 +205,12 @@ func Test_RecorderHeartbeat(t *testing.T) {
 	// No repositories: Heartbeat must not create state.json.
 	r := NewRecorder()
 	r.Heartbeat()
-	mod, err := StateModTime()
+	path, err := stateFile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mod.IsZero() {
-		t.Fatalf("assertion failed: mod.IsZero()")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("assertion failed: state.json must not exist (stat error: %v)", err)
 	}
 
 	r.Set("/repo", StatusRunning, "", time.Time{})
@@ -303,7 +274,7 @@ func Test_RecorderRemove(t *testing.T) {
 // @param           t  "test handle used for isolated setup and assertions"
 func Test_RecorderRemovePersistedOnly(t *testing.T) {
 	setupState(t)
-	if err := WriteState(&State{Repos: []RepoStatus{
+	if err := writeState(&State{Repos: []RepoStatus{
 		{Repo: "/repo", Status: StatusRunning, LastSyncedAt: time.Unix(5000, 0)},
 		{Repo: "/other", Status: StatusPaused, Stage: "commit", LastSyncedAt: time.Unix(4000, 0)},
 	}}); err != nil {
@@ -386,7 +357,7 @@ func Test_RecorderPreservesDiskLastSynced(t *testing.T) {
 	r.Set("/repo", StatusRunning, "", time.Unix(1000, 0))
 
 	// A separate process (the CLI) writes a newer LastSyncedAt directly to state.json.
-	if err := WriteState(&State{Repos: []RepoStatus{
+	if err := writeState(&State{Repos: []RepoStatus{
 		{Repo: "/repo", Status: StatusRunning, UpdatedAt: time.Unix(1500, 0), LastSyncedAt: time.Unix(5000, 0)},
 	}}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -414,7 +385,7 @@ func Test_RecorderPreservesDiskLastSynced(t *testing.T) {
 func Test_RecordSyncSuccess(t *testing.T) {
 	t.Run("existing entry preserves runtime fields", func(t *testing.T) {
 		setupState(t)
-		if err := WriteState(&State{Repos: []RepoStatus{
+		if err := writeState(&State{Repos: []RepoStatus{
 			{Repo: "/repo", Status: StatusPaused, Stage: "rebase", UpdatedAt: time.Unix(1000, 0)},
 		}}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -446,7 +417,7 @@ func Test_RecordSyncSuccess(t *testing.T) {
 
 	t.Run("missing entry creates running entry", func(t *testing.T) {
 		setupState(t)
-		if err := WriteState(&State{Repos: []RepoStatus{
+		if err := writeState(&State{Repos: []RepoStatus{
 			{Repo: "/other", Status: StatusRunning, UpdatedAt: time.Unix(1000, 0)},
 		}}); err != nil {
 			t.Fatalf("unexpected error: %v", err)

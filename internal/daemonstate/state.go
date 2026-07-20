@@ -53,15 +53,14 @@ type State struct {
 
 // @description    Resolves the state file path.
 //
-// StateFile joins the platform configuration directory with the git-auto-sync directory and the
+// stateFile joins the platform configuration directory with the git-auto-sync directory and the
 // state.json file name, placing runtime status beside config.json. It does not create the directory
-// so callers that only inspect the path, such as the modification-time poller, avoid filesystem side
-// effects.
+// so callers that only inspect the path avoid filesystem side effects.
 //
 // @return          string  "absolute path to the state file"
 //
 // @return          error   "nil on success, or an error when the platform config directory cannot be resolved"
-func StateFile() (string, error) {
+func stateFile() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -79,14 +78,14 @@ func StateFile() (string, error) {
 //
 // @return          error   "nil on success or when the file is absent, or an error resolving, opening, or decoding the file"
 func ReadState() (*State, error) {
-	stateFile, err := StateFile()
+	path, err := stateFile()
 	if err != nil {
 		return nil, err
 	}
 
 	state := &State{}
 
-	fh, err := os.Open(stateFile)
+	fh, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return state, nil
@@ -106,20 +105,20 @@ func ReadState() (*State, error) {
 
 // @description    Writes the daemon state atomically.
 //
-// WriteState encodes state to state.json via a temporary file in the same directory followed by a
+// writeState encodes state to state.json via a temporary file in the same directory followed by a
 // rename, so a CLI process reading the file concurrently with a daemon write never observes a
 // partial document. Repositories are sorted by path for stable output.
 //
 // @param           state  "state to persist"
 //
 // @return          error  "nil on success, or an error creating the directory, encoding, writing, or renaming the file"
-func WriteState(state *State) error {
-	stateFile, err := StateFile()
+func writeState(state *State) error {
+	path, err := stateFile()
 	if err != nil {
 		return err
 	}
 
-	dir := filepath.Dir(stateFile)
+	dir := filepath.Dir(path)
 	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
 		return mkErr
 	}
@@ -152,7 +151,7 @@ func WriteState(state *State) error {
 		cleanup()
 		return err
 	}
-	if err := os.Rename(tmpName, stateFile); err != nil {
+	if err := os.Rename(tmpName, path); err != nil {
 		cleanup()
 		return err
 	}
@@ -197,34 +196,10 @@ func RecordSyncSuccess(repo string) error {
 		})
 	}
 
-	if err := WriteState(state); err != nil {
+	if err := writeState(state); err != nil {
 		return err
 	}
 	return nil
-}
-
-// StateModTime stats state.json and returns its modification time. It returns the zero time with a
-// nil error when the file does not exist so callers can treat a missing file as an empty, unchanged
-// state.
-//
-// @return          time.Time  "file modification time, or the zero time when the file is absent"
-//
-// @return          error      "nil on success or when the file is absent, or an error resolving or stating the path"
-func StateModTime() (time.Time, error) {
-	stateFile, err := StateFile()
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	info, err := os.Stat(stateFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return time.Time{}, nil
-		}
-		return time.Time{}, err
-	}
-
-	return info.ModTime(), nil
 }
 
 // @description    Reports whether the status entry is stale.

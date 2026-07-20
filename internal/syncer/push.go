@@ -19,13 +19,13 @@ import (
 func push(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	logger.Debug("starting push")
 
-	bi, err := fetchBranchInfo(repoConfig.RepoPath)
+	bi, err := readBranchInfo(repoConfig.RepoPath)
 	if err != nil {
 		logger.Error("push failed", "operation", "read branch information", "error", err)
 		return err
 	}
 
-	if bi.UpstreamBranch == "" || bi.UpstreamRemote == "" {
+	if !bi.hasUpstream() {
 		logger.Info("push skipped", "reason", "no upstream")
 		return nil
 	}

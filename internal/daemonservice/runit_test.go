@@ -226,7 +226,7 @@ func TestRunitBackendUninstallPreservesServiceLogs(t *testing.T) {
 	if err := backend.Install(); err != nil {
 		t.Fatalf("Install returned error %v, want nil", err)
 	}
-	logFile := filepath.Join(prefix, "var", "log", "sv", runitServiceName, "current")
+	logFile := filepath.Join(prefix, "var", "log", "sv", daemonServiceName, "current")
 	if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
 		t.Fatalf("MkdirAll(log dir) returned error %v", err)
 	}

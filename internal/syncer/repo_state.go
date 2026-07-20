@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/northhalf/git-auto-sync/internal/config"
 )
 
@@ -81,37 +79,25 @@ func checkRepoState(logger *slog.Logger, repoConfig config.RepoConfig) error {
 		return fmt.Errorf("%w: %s", errRepoBusy, op)
 	}
 
-	repo, err := git.PlainOpenWithOptions(repoConfig.RepoPath, &git.PlainOpenOptions{DetectDotGit: true})
+	bi, err := readBranchInfo(repoConfig.RepoPath)
 	if err != nil {
-		logger.Error("repo state check failed", "operation", "open repository", "error", err)
+		logger.Error("repo state check failed", "operation", "read branch information", "error", err)
 		return err
 	}
 
-	ref, err := repo.Reference(plumbing.HEAD, false)
-	if err != nil {
-		logger.Error("repo state check failed", "operation", "read HEAD", "error", err)
-		return err
-	}
-
-	if ref.Type() == plumbing.HashReference {
+	// A detached HEAD resolves to no branch name; check it before the upstream so the more
+	// specific reason is reported.
+	if bi.CurrentBranch == "" {
 		logger.Error("repo state check failed", "reason", "detached HEAD")
 		return errDetachedHead
 	}
 
-	branchName := ref.Target().Short()
-	cfg, err := repo.Config()
-	if err != nil {
-		logger.Error("repo state check failed", "operation", "read config", "error", err)
-		return err
-	}
-
-	branchCfg := cfg.Branches[branchName]
-	if branchCfg == nil || branchCfg.Remote == "" || branchCfg.Merge == "" {
-		logger.Error("repo state check failed", "reason", "no upstream", "branch", branchName)
+	if !bi.hasUpstream() {
+		logger.Error("repo state check failed", "reason", "no upstream", "branch", bi.CurrentBranch)
 		return errNoUpstream
 	}
 
-	logger.Info("repo state verified", "branch", branchName, "remote", branchCfg.Remote)
+	logger.Info("repo state verified", "branch", bi.CurrentBranch, "remote", bi.UpstreamRemote)
 	return nil
 }
 
@@ -128,12 +114,12 @@ func checkRepoState(logger *slog.Logger, repoConfig config.RepoConfig) error {
 func repoStateStage(err error) string {
 	switch {
 	case errors.Is(err, errRepoBusy):
-		return "repo-busy"
+		return SyncStageRepoBusy
 	case errors.Is(err, errDetachedHead):
-		return "detached-head"
+		return SyncStageDetachedHead
 	case errors.Is(err, errNoUpstream):
-		return "no-upstream"
+		return SyncStageNoUpstream
 	default:
-		return syncStageRepoState
+		return SyncStageRepoState
 	}
 }

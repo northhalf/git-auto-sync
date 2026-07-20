@@ -11,9 +11,16 @@ type branchInfo struct {
 	UpstreamBranch string
 }
 
+// @description    Reports whether the branch has a configured upstream to sync with.
+//
+// @return          bool  "true when both the upstream remote and branch are set"
+func (bi branchInfo) hasUpstream() bool {
+	return bi.UpstreamRemote != "" && bi.UpstreamBranch != ""
+}
+
 // @description    Reads current branch and upstream details.
 //
-// fetchBranchInfo reads the current branch and its configured upstream remote and branch,
+// readBranchInfo reads the current branch and its configured upstream remote and branch,
 // returning only the current branch when no tracking entry exists.
 //
 // @param           repoPath    "path to the repository root"
@@ -21,7 +28,7 @@ type branchInfo struct {
 // @return          branchInfo  "current branch and any configured upstream details"
 //
 // @return          error       "nil on success, or an error reading the repository, config, or HEAD"
-func fetchBranchInfo(repoPath string) (branchInfo, error) {
+func readBranchInfo(repoPath string) (branchInfo, error) {
 	repo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		return branchInfo{}, err

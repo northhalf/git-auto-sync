@@ -193,36 +193,36 @@ func Test_ResolveNils(t *testing.T) {
 	}
 }
 
-// @description    Verifies LocalFingerprint changes only when [auto-sync] keys change.
+// @description    Verifies SyncSettingsFingerprint changes only when [auto-sync] keys change.
 //
-// Test_LocalFingerprint verifies that equal settings produce equal fingerprints, and that changing
+// Test_SyncSettingsFingerprint verifies that equal settings produce equal fingerprints, and that changing
 // any one of the three keys produces a different fingerprint. A nil settings produces a stable
 // empty fingerprint.
 //
 // @param           t   "test handle used for assertions"
-func Test_LocalFingerprint(t *testing.T) {
-	if LocalFingerprint(nil) != LocalFingerprint(&Settings{}) {
-		t.Fatalf("got %v, want %v", LocalFingerprint(nil), LocalFingerprint(&Settings{}))
+func Test_SyncSettingsFingerprint(t *testing.T) {
+	if SyncSettingsFingerprint(nil) != SyncSettingsFingerprint(&Settings{}) {
+		t.Fatalf("got %v, want %v", SyncSettingsFingerprint(nil), SyncSettingsFingerprint(&Settings{}))
 	}
 
 	a := 30
 	b := 5
 	gitA := "/usr/bin/git"
 	base := &Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}
-	fp := LocalFingerprint(base)
-	if fp != LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}) {
-		t.Fatalf("got %v, want %v", fp, LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}))
+	fp := SyncSettingsFingerprint(base)
+	if fp != SyncSettingsFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}) {
+		t.Fatalf("got %v, want %v", fp, SyncSettingsFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitA}))
 	}
 
 	changed := 40
-	if LocalFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) == fp {
-		t.Fatalf("assertion failed: LocalFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) != fp")
+	if SyncSettingsFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) == fp {
+		t.Fatalf("assertion failed: SyncSettingsFingerprint(&Settings{SyncInterval: &changed, Debounce: &b, GitExec: &gitA}) != fp")
 	}
-	if LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) == fp {
-		t.Fatalf("assertion failed: LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) != fp")
+	if SyncSettingsFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) == fp {
+		t.Fatalf("assertion failed: SyncSettingsFingerprint(&Settings{SyncInterval: &a, Debounce: &changed, GitExec: &gitA}) != fp")
 	}
 	gitB := "/opt/git/bin/git"
-	if LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) == fp {
-		t.Fatalf("assertion failed: LocalFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) != fp")
+	if SyncSettingsFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) == fp {
+		t.Fatalf("assertion failed: SyncSettingsFingerprint(&Settings{SyncInterval: &a, Debounce: &b, GitExec: &gitB}) != fp")
 	}
 }

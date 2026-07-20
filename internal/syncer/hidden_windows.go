@@ -3,18 +3,13 @@
 package syncer
 
 import (
-	"path/filepath"
-	"strings"
-
 	"golang.org/x/sys/windows"
 )
 
 // @description    Reports whether a path is hidden by the Windows filesystem attribute.
 //
 // isHiddenByOS reports whether filePath itself or any ancestor directory up to but excluding the
-// repository root carries the FILE_ATTRIBUTE_HIDDEN bit. Paths at the repository root, outside the
-// repository, or that cannot be queried (deleted, inaccessible) are treated as not hidden so the
-// repository root and removal or rename events are never blocked.
+// repository root carries the FILE_ATTRIBUTE_HIDDEN bit.
 //
 // @param           repoRoot   "absolute path to the repository root"
 //
@@ -22,29 +17,7 @@ import (
 //
 // @return          bool       "true when the file or an ancestor directory carries the Windows hidden attribute"
 func isHiddenByOS(repoRoot string, filePath string) bool {
-	abs, err := filepath.Abs(filePath)
-	if err != nil {
-		return false
-	}
-
-	root, err := filepath.Abs(repoRoot)
-	if err != nil {
-		return false
-	}
-
-	rel, err := filepath.Rel(root, abs)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return false
-	}
-
-	cur := root
-	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
-		cur = filepath.Join(cur, part)
-		if hasHiddenAttribute(cur) {
-			return true
-		}
-	}
-	return false
+	return hasHiddenAncestor(repoRoot, filePath, hasHiddenAttribute)
 }
 
 // @description    Reads the Windows file attributes of a path and tests the hidden bit.

@@ -169,7 +169,7 @@ func (r *Recorder) persistLocked() {
 	for _, s := range r.states {
 		out.Repos = append(out.Repos, s)
 	}
-	if err := WriteState(out); err != nil {
+	if err := writeState(out); err != nil {
 		slog.Error("write daemon state failed", "error", err)
 	}
 }

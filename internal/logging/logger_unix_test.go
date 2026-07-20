@@ -4,7 +4,6 @@ package logging
 
 import (
 	"context"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,14 +48,11 @@ func TestSetupLoggerFIFOHelper(t *testing.T) {
 		t.Skip("helper subprocess only")
 	}
 
-	logger, logCloser, err := setupLoggerWithPathAndOutput(false, logPath, io.Discard)
-	if err != nil {
-		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil fallback", err)
-	}
+	logger, logCloser := setupLoggerWithPath(false, logPath)
 	if logger == nil {
-		t.Fatal("setupLoggerWithPathAndOutput() fallback logger is nil")
+		t.Fatal("setupLoggerWithPath() fallback logger is nil")
 	}
 	if logCloser != nil {
-		t.Fatal("setupLoggerWithPathAndOutput() fallback closer is nonnil")
+		t.Fatal("setupLoggerWithPath() fallback closer is nonnil")
 	}
 }

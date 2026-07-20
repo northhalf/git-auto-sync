@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -17,11 +18,25 @@ import (
 	"github.com/northhalf/git-auto-sync/internal/logging"
 	"github.com/northhalf/git-auto-sync/internal/notification"
 	"github.com/northhalf/git-auto-sync/internal/syncer"
+	"github.com/northhalf/git-auto-sync/internal/termux"
 	"github.com/northhalf/git-auto-sync/internal/watcher"
 )
 
 //go:embed .version
 var version string
+
+// @description    Warns when desktop notifications are unavailable.
+//
+// warnIfNotificationUnavailable is the shared Before hook for commands that may trigger
+// desktop notifications.
+//
+// @param           _      "CLI context, unused"
+//
+// @return          error  "always nil"
+func warnIfNotificationUnavailable(_ *cli.Context) error {
+	notification.WarnIfUnavailable(slog.Default())
+	return nil
+}
 
 // @description    Runs the command-line application.
 //
@@ -50,17 +65,9 @@ func main() {
 				Name:    "watch",
 				Aliases: []string{"monitor", "w", "m"},
 				Usage:   "Monitor a folder for changes",
-				Before: func(ctx *cli.Context) error {
-					notification.WarnIfUnavailable(slog.Default())
-					return nil
-				},
+				Before:  warnIfNotificationUnavailable,
 				Action: func(ctx *cli.Context) error {
-					repoPath, err := os.Getwd()
-					if err != nil {
-						return err
-					}
-
-					repoPath, err = isValidGitRepo(repoPath)
+					repoPath, err := currentRepoPath()
 					if err != nil {
 						return err
 					}
@@ -77,10 +84,7 @@ func main() {
 				Name:    "sync",
 				Aliases: []string{"s"},
 				Usage:   "Sync a repo right now",
-				Before: func(ctx *cli.Context) error {
-					notification.WarnIfUnavailable(slog.Default())
-					return nil
-				},
+				Before:  warnIfNotificationUnavailable,
 				Flags: []cli.Flag{
 					&cli.StringSliceFlag{
 						Name:    "env",
@@ -89,12 +93,7 @@ func main() {
 					},
 				},
 				Action: func(ctx *cli.Context) error {
-					repoPath, err := os.Getwd()
-					if err != nil {
-						return err
-					}
-
-					repoPath, err = isValidGitRepo(repoPath)
+					repoPath, err := currentRepoPath()
 					if err != nil {
 						return err
 					}
@@ -122,12 +121,7 @@ func main() {
 				Name:  "check",
 				Usage: "Check if a file will be ignored",
 				Action: func(ctx *cli.Context) error {
-					repoPath, err := os.Getwd()
-					if err != nil {
-						return err
-					}
-
-					repoPath, err = isValidGitRepo(repoPath)
+					repoPath, err := currentRepoPath()
 					if err != nil {
 						return err
 					}
@@ -155,10 +149,7 @@ func main() {
 				Name:    "daemon",
 				Aliases: []string{"d"},
 				Usage:   "Interact with the background daemon",
-				Before: func(ctx *cli.Context) error {
-					notification.WarnIfUnavailable(slog.Default())
-					return nil
-				},
+				Before:  warnIfNotificationUnavailable,
 				Subcommands: []*cli.Command{
 					{
 						Name:   "status",
@@ -212,91 +203,17 @@ func main() {
 		},
 	}
 
-	// Sanitize argv before dispatching: affected Termux versions insert the
+	// Sanitize argv before dispatching on Android: affected Termux versions insert the
 	// executable's own path as argv[1] (termux/termux-app#4630), which would
 	// otherwise make urfave/cli report "No help topic for '<path>'" and exit.
-	args := sanitizeArgs(os.Args)
+	args := os.Args
+	if runtime.GOOS == "android" {
+		args = termux.SanitizeArgs(args)
+	}
 	err := app.Run(args)
 	if err != nil {
 		slog.Error("run failed", "error", err)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-// @description    Drops a Termux-inserted self-path duplicate from argv.
-//
-// On affected Termux versions (termux/termux-app#4630), the exec wrapper rewrites
-// execve(prog, [argv0, args...]) to execve(linker64, [prog, argv0, args...]), so
-// Go sees os.Args = [argv0, progAbsolutePath, args...]. urfave/cli then treats
-// the inserted progAbsolutePath as an unknown command and reports "No help topic
-// for '<path>'". os.Executable() returns linker64 (not prog), so sanitizeArgs
-// detects the duplicate by comparing argv[1] against argv[0]: when they name the
-// same file, argv[1] is the inserted duplicate and is removed.
-//
-// @param           argv       "raw command-line arguments, typically os.Args"
-//
-// @return          []string   "argv with a leading self-path duplicate removed, or argv unchanged"
-func sanitizeArgs(argv []string) []string {
-	if len(argv) < 2 {
-		return argv
-	}
-	if isSelfDuplicate(argv[0], argv[1]) {
-		return append([]string{argv[0]}, argv[2:]...)
-	}
-	return argv
-}
-
-// @description    Reports whether argv[1] is the Termux-inserted executable duplicate.
-//
-// isSelfDuplicate returns true when argv[1] names the same file as argv[0]
-// (absolute or relative path invocation), or for PATH invocation where argv[0]
-// is a bare name, when argv[1] is an executable whose basename equals argv[0].
-//
-// @param           argv0  "user-typed program name, os.Args[0]"
-//
-// @param           argv1  "suspect duplicate, os.Args[1]"
-//
-// @return          bool   "true when argv[1] is the inserted executable path"
-func isSelfDuplicate(argv0, argv1 string) bool {
-	if sameExecutablePath(argv0, argv1) {
-		return true
-	}
-	return filepath.Base(argv1) == argv0 && isExecutableFile(argv1)
-}
-
-// @description    Reports whether two paths name the same file.
-//
-// sameExecutablePath compares the paths directly and, when both stat, by inode
-// via os.SameFile so that a relative, symlinked, or Android multi-user aliased
-// path still matches. A path that does not exist returns false.
-//
-// @param           a      "first path"
-//
-// @param           b      "second path"
-//
-// @return          bool   "true when both paths resolve to the same file"
-func sameExecutablePath(a, b string) bool {
-	if a == b {
-		return true
-	}
-	ia, errA := os.Stat(a)
-	ib, errB := os.Stat(b)
-	if errA != nil || errB != nil {
-		return false
-	}
-	return os.SameFile(ia, ib)
-}
-
-// @description    Reports whether a path names an executable regular file.
-//
-// @param           path  "filesystem path to test"
-//
-// @return          bool  "true when the path is a regular file with any execute bit"
-func isExecutableFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return false
-	}
-	return info.Mode().Perm()&0o111 != 0
 }

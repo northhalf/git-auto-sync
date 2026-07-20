@@ -2,14 +2,20 @@ package syncer
 
 import "errors"
 
+// Sync stage labels identify the AutoSync stage that failed. They are recorded in the daemon
+// state file and surfaced by the CLI's status output, so the values are part of the persisted
+// state format and must not change.
 const (
-	syncStageAuthor    = "author"
-	syncStageCommit    = "commit"
-	syncStageFetch     = "fetch"
-	syncStageCompare   = "compare"
-	syncStageRebase    = "rebase"
-	syncStagePush      = "push"
-	syncStageRepoState = "repo-state"
+	SyncStageAuthor       = "author"
+	SyncStageCommit       = "commit"
+	SyncStageFetch        = "fetch"
+	SyncStageCompare      = "compare"
+	SyncStageRebase       = "rebase"
+	SyncStagePush         = "push"
+	SyncStageRepoState    = "repo-state"
+	SyncStageRepoBusy     = "repo-busy"
+	SyncStageDetachedHead = "detached-head"
+	SyncStageNoUpstream   = "no-upstream"
 )
 
 type syncError struct {
@@ -62,5 +68,5 @@ func SyncErrorStage(err error) string {
 // @return          bool  "true for fetch and push stage errors"
 func IsRemoteSyncError(err error) bool {
 	stage := SyncErrorStage(err)
-	return stage == syncStageFetch || stage == syncStagePush
+	return stage == SyncStageFetch || stage == SyncStagePush
 }

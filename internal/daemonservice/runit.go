@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/kardianos/service"
+
+	"github.com/northhalf/git-auto-sync/internal/termux"
 )
 
 const (
 	managedMarkerName    = ".git-auto-sync-managed"
 	managedMarkerContent = "git-auto-sync-runit-v1"
-	runitServiceName     = "git-auto-sync-daemon"
+	daemonServiceName    = "git-auto-sync-daemon"
 )
 
 type runCommand func(string, ...string) ([]byte, error)
@@ -47,12 +49,12 @@ func newRunitBackend(prefix, daemonPath string, runner runCommand) (*runitBacken
 		prefix:      prefix,
 		svPath:      filepath.Join(prefix, "bin", "sv"),
 		serviceRoot: filepath.Join(prefix, "var", "service"),
-		serviceDir:  filepath.Join(prefix, "var", "service", runitServiceName),
+		serviceDir:  filepath.Join(prefix, "var", "service", daemonServiceName),
 		loggerPath:  filepath.Join(prefix, "share", "termux-services", "svlogger"),
 		daemonPath:  daemonPath,
 		run:         runner,
 	}
-	if err := requireExecutable(backend.svPath); err != nil {
+	if err := termux.RequireExecutable(backend.svPath); err != nil {
 		return nil, termuxServicesError(err)
 	}
 	serviceRootInfo, err := os.Stat(backend.serviceRoot)
@@ -69,26 +71,10 @@ func newRunitBackend(prefix, daemonPath string, runner runCommand) (*runitBacken
 	if !loggerInfo.Mode().IsRegular() {
 		return nil, termuxServicesError(fmt.Errorf("%s is not a regular file", backend.loggerPath))
 	}
-	if err := requireExecutable(backend.daemonPath); err != nil {
+	if err := termux.RequireExecutable(backend.daemonPath); err != nil {
 		return nil, fmt.Errorf("git-auto-sync-daemon is unavailable: %w", err)
 	}
 	return backend, nil
-}
-
-// @description    Checks that a path names an executable regular file.
-//
-// @param           path  "filesystem path to validate"
-//
-// @return          error  "nil for an executable file, or a validation error"
-func requireExecutable(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return fmt.Errorf("%s is not executable", path)
-	}
-	return nil
 }
 
 // @description    Wraps a missing runit dependency with Termux installation guidance.
