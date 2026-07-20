@@ -3,49 +3,47 @@ package syncer
 import (
 	"log/slog"
 
-	git "github.com/go-git/go-git/v5"
 	"github.com/northhalf/git-auto-sync/internal/config"
 	"github.com/ztrue/tracerr"
 )
 
-// @description    Fetches every configured remote.
+// @description    Fetches the current branch's configured upstream branch.
 //
-// fetch runs Git fetch for every remote configured in the repository, stopping at the first
-// repository or command error. Remote names may be logged, but remote URLs are never logged.
+// fetch runs Git fetch for only the upstream remote and branch of the current branch, the single
+// remote-tracking reference that the compare and rebase stages read. It skips repositories without
+// a configured upstream and branches tracking a local branch (remote "."), neither of which needs
+// a network operation. A fetch failure, such as an upstream branch deleted on the remote, stops
+// the pipeline at the fetch stage. Remote names may be logged, but remote URLs are never logged.
 //
 // @param           logger      "repository-scoped logger"
 //
 // @param           repoConfig  "configuration for the repository to fetch"
 //
-// @return          error       "nil when all remotes are fetched, or the first encountered error"
+// @return          error       "nil when the upstream branch is fetched or no fetch is needed, or the fetch error"
 func fetch(logger *slog.Logger, repoConfig config.RepoConfig) error {
 	logger.Debug("starting fetch")
 
-	r, err := git.PlainOpenWithOptions(repoConfig.RepoPath, &git.PlainOpenOptions{DetectDotGit: true})
+	bi, err := fetchBranchInfo(repoConfig.RepoPath)
 	if err != nil {
-		logger.Error("fetch failed", "operation", "open repository", "error", err)
+		logger.Error("fetch failed", "operation", "read branch information", "error", err)
 		return tracerr.Wrap(err)
 	}
 
-	remotes, err := r.Remotes()
-	if err != nil {
-		logger.Error("fetch failed", "operation", "list remotes", "error", err)
-		return tracerr.Wrap(err)
-	}
-
-	if len(remotes) == 0 {
-		logger.Info("fetch skipped", "reason", "no remotes")
+	if bi.UpstreamRemote == "" || bi.UpstreamBranch == "" {
+		logger.Info("fetch skipped", "reason", "no upstream")
 		return nil
 	}
 
-	for _, remote := range remotes {
-		remoteName := remote.Config().Name
-		if _, err := gitCommand(logger, repoConfig, []string{"fetch", remoteName}); err != nil {
-			logger.Error("fetch failed", "remote", remoteName, "error", err)
-			return tracerr.Wrap(err)
-		}
+	if bi.UpstreamRemote == "." {
+		logger.Info("fetch skipped", "reason", "local upstream", "branch", bi.UpstreamBranch)
+		return nil
 	}
 
-	logger.Info("fetch completed", "remotes", len(remotes))
+	if _, err := gitCommand(logger, repoConfig, []string{"fetch", bi.UpstreamRemote, bi.UpstreamBranch}); err != nil {
+		logger.Error("fetch failed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch, "error", err)
+		return tracerr.Wrap(err)
+	}
+
+	logger.Info("fetch completed", "remote", bi.UpstreamRemote, "branch", bi.UpstreamBranch)
 	return nil
 }

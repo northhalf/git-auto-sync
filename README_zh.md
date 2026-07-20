@@ -102,7 +102,7 @@ source /path/to/completions/zsh_autocomplete
 git-auto-sync sync
 ```
 
-这会提交符合条件的改动、拉取所有远程、变基到配置的上游分支并推送。
+这会提交符合条件的改动、拉取配置的上游分支、变基到该分支并推送。
 
 ### 后台守护进程
 

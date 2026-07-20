@@ -14,12 +14,13 @@ var sendAlert = notification.Alert
 // @description    Synchronizes a Git repository.
 //
 // AutoSync verifies that the repository is in a syncable state, verifies the Git author, commits
-// eligible worktree changes, and fetches remotes. It then resolves the synchronization state
-// between HEAD and its upstream and acts on it: equal skips rebase and push, local-ahead only
-// pushes, upstream-ahead only rebases, and diverged rebases then pushes. A repo that has an
-// operation in progress, a detached HEAD, or no upstream branch pauses with a platform alert before
-// any mutation runs. A rebase conflict triggers a platform alert and stops the pipeline before push.
-// Stage functions log their own outcomes, so AutoSync does not duplicate stage errors.
+// eligible worktree changes, and fetches the current branch's upstream branch. It then resolves
+// the synchronization state between HEAD and its upstream and acts on it: equal skips rebase and
+// push, local-ahead only pushes, upstream-ahead only rebases, and diverged rebases then pushes. A
+// repo that has an operation in progress, a detached HEAD, or no upstream branch pauses with a
+// platform alert before any mutation runs. A rebase conflict triggers a platform alert and stops
+// the pipeline before push. Stage functions log their own outcomes, so AutoSync does not
+// duplicate stage errors.
 //
 // @param           logger      "repository-scoped logger"
 //

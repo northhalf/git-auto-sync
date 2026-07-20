@@ -102,7 +102,7 @@ Run inside any Git repository:
 git-auto-sync sync
 ```
 
-This commits eligible changes, fetches all remotes, rebases onto the configured upstream branch, and pushes.
+This commits eligible changes, fetches the configured upstream branch, rebases onto it, and pushes.
 
 ### Background daemon
 
