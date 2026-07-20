@@ -7,7 +7,6 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/kardianos/service v1.3.0
-	github.com/otiai10/copy v1.14.1
 	github.com/prashantgupta24/mac-sleep-notifier v1.0.1
 	github.com/rjeczalik/notify v0.9.3
 	github.com/urfave/cli/v2 v2.27.7
@@ -37,7 +36,6 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
-	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
@@ -49,6 +47,5 @@ require (
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

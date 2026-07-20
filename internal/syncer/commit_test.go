@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	cp "github.com/otiai10/copy"
 
 	"gotest.tools/v3/assert"
 )
@@ -30,7 +29,7 @@ func PrepareFixture(t *testing.T, name string) config.RepoConfig {
 	assert.NilError(t, err)
 
 	fixturePath := filepath.Join("testdata", name)
-	err = cp.Copy(fixturePath, newRepoPath)
+	err = os.CopyFS(newRepoPath, os.DirFS(fixturePath))
 	assert.NilError(t, err)
 
 	err = os.Rename(filepath.Join(newRepoPath, ".gitted"), filepath.Join(newRepoPath, ".git"))

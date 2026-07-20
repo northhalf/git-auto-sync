@@ -12,7 +12,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/northhalf/git-auto-sync/internal/config"
-	cp "github.com/otiai10/copy"
 	"gotest.tools/v3/assert"
 )
 
@@ -35,7 +34,7 @@ func PrepareMultiFixtures(t *testing.T, name string, deps []string) config.RepoC
 	for _, name := range deps {
 		fixturePath := filepath.Join("testdata", name)
 		newPath := filepath.Join(newTestDataPath, name)
-		err := cp.Copy(fixturePath, newPath)
+		err := os.CopyFS(newPath, os.DirFS(fixturePath))
 		assert.NilError(t, err)
 
 		err = os.Rename(filepath.Join(newPath, ".gitted"), filepath.Join(newPath, ".git"))
