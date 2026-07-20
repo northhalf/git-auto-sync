@@ -26,10 +26,9 @@ const (
 // @param           debug  "when true, also emit logs to stdout at DEBUG level"
 //
 // @return          *slog.Logger  "configured logger"
-//
-// @return          error         "always nil; setup failures degrade instead of returning an error"
-func SetupLogger(debug bool) (*slog.Logger, error) {
-	return setupLoggerWithPath(debug, defaultLogPath(cliLogFilename))
+func SetupLogger(debug bool) *slog.Logger {
+	logger, _, _ := setupLoggerWithPathAndOutput(debug, defaultLogPath(cliLogFilename), os.Stdout)
+	return logger
 }
 
 // @description    Initializes the shared daemon logger.
@@ -41,27 +40,9 @@ func SetupLogger(debug bool) (*slog.Logger, error) {
 // @param           debug  "when true, also emit logs to stdout at DEBUG level"
 //
 // @return          *slog.Logger  "configured logger"
-//
-// @return          error         "always nil; setup failures degrade instead of returning an error"
-func SetupDaemonLogger(debug bool) (*slog.Logger, error) {
-	return setupLoggerWithPath(debug, defaultLogPath(daemonLogFilename))
-}
-
-// @description    Initializes the logger with an explicit log file path.
-//
-// setupLoggerWithPath exists so tests can exercise logger setup without touching the real log
-// directory.
-//
-// @param           debug    "when true, also emit logs to stdout at DEBUG level"
-//
-// @param           logPath  "full path to the log file"
-//
-// @return          *slog.Logger  "configured logger"
-//
-// @return          error         "always nil; setup failures degrade instead of returning an error"
-func setupLoggerWithPath(debug bool, logPath string) (*slog.Logger, error) {
-	logger, _, err := setupLoggerWithPathAndOutput(debug, logPath, os.Stdout)
-	return logger, err
+func SetupDaemonLogger(debug bool) *slog.Logger {
+	logger, _, _ := setupLoggerWithPathAndOutput(debug, defaultLogPath(daemonLogFilename), os.Stdout)
+	return logger
 }
 
 // @description    Initializes the logger with injectable debug output and exposes file cleanup, set default logger.
@@ -208,10 +189,10 @@ func newHandlerOptions(debug bool) *slog.HandlerOptions {
 
 // @description    Returns a named default log file path for the current platform.
 //
-// defaultLogPath reads platform and environment state before delegating path construction to
-// logPathForPlatform. On Windows, LOCALAPPDATA is sufficient even when no user home is available.
-// The function falls back to the current directory when neither the required environment value nor
-// a user home can be determined.
+// defaultLogPath reads platform and environment state before joining the log directory with the
+// file name. On Windows, LOCALAPPDATA is sufficient even when no user home is available. The
+// function falls back to the current directory when neither the required environment value nor a
+// user home can be determined.
 //
 // @param           filename  "fixed executable-specific log filename"
 //
@@ -219,32 +200,14 @@ func newHandlerOptions(debug bool) *slog.HandlerOptions {
 func defaultLogPath(filename string) string {
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if runtime.GOOS == "windows" && localAppData != "" {
-		return logPathForPlatform(runtime.GOOS, "", localAppData, filename)
+		return filepath.Join(logDirForPlatform(runtime.GOOS, "", localAppData), filename)
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", filename)
 	}
-	return logPathForPlatform(runtime.GOOS, home, localAppData, filename)
-}
-
-// @description    Builds a named log path from explicit platform path inputs.
-//
-// logPathForPlatform is side-effect free so executable-specific path selection can be tested
-// independently of the host operating system, process environment, and real user home.
-//
-// @param           goos          "target operating-system identifier"
-//
-// @param           home          "user home directory"
-//
-// @param           localAppData  "Windows local application-data directory, when available"
-//
-// @param           filename      "fixed executable-specific log filename"
-//
-// @return          string        "platform-appropriate full log file path"
-func logPathForPlatform(goos, home, localAppData, filename string) string {
-	return filepath.Join(logDirForPlatform(goos, home, localAppData), filename)
+	return filepath.Join(logDirForPlatform(runtime.GOOS, home, localAppData), filename)
 }
 
 // @description    Builds a log directory from explicit platform path inputs.

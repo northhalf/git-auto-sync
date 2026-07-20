@@ -43,7 +43,7 @@ func main() {
 		},
 		Before: func(ctx *cli.Context) error {
 			debug := ctx.Bool("debug") || os.Getenv("DEBUG") == "true"
-			_, _ = logging.SetupLogger(debug)
+			logging.SetupLogger(debug)
 			return nil
 		},
 		Commands: []*cli.Command{

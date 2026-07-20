@@ -374,20 +374,20 @@ func TestSetupLoggerWithPathFallsBackForUnusablePath(t *testing.T) {
 	}
 	os.Stderr = warningFile
 
-	logger, setupErr := setupLoggerWithPath(false, filepath.Join(parentFile, "git-auto-sync.log"))
+	logger, _, setupErr := setupLoggerWithPathAndOutput(false, filepath.Join(parentFile, "git-auto-sync.log"), io.Discard)
 	os.Stderr = originalStderr
 	if closeErr := warningFile.Close(); closeErr != nil {
 		t.Fatalf("closing captured stderr: %v", closeErr)
 	}
 
 	if setupErr != nil {
-		t.Fatalf("setupLoggerWithPath() error = %v, want nil fallback", setupErr)
+		t.Fatalf("setupLoggerWithPathAndOutput() error = %v, want nil fallback", setupErr)
 	}
 	if logger == nil {
-		t.Fatal("setupLoggerWithPath() fallback logger is nil")
+		t.Fatal("setupLoggerWithPathAndOutput() fallback logger is nil")
 	}
 	if slog.Default() != logger {
-		t.Fatal("setupLoggerWithPath() did not install fallback logger as default")
+		t.Fatal("setupLoggerWithPathAndOutput() did not install fallback logger as default")
 	}
 	warning, err := os.ReadFile(warningFile.Name())
 	if err != nil {
@@ -423,9 +423,9 @@ func TestLogPathForPlatformUsesExecutableFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := logPathForPlatform("linux", filepath.Join("root", "home"), "", tt.filename)
+			got := filepath.Join(logDirForPlatform("linux", filepath.Join("root", "home"), ""), tt.filename)
 			if got != tt.want {
-				t.Fatalf("logPathForPlatform() = %q, want %q", got, tt.want)
+				t.Fatalf("log path = %q, want %q", got, tt.want)
 			}
 		})
 	}
