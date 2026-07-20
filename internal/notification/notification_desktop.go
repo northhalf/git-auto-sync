@@ -3,11 +3,16 @@
 package notification
 
 import (
+	_ "embed"
 	"log/slog"
 
 	"github.com/gen2brain/beeep"
-	"github.com/northhalf/git-auto-sync/assets"
 )
+
+// warningPNG contains the embedded rebase-conflict notification icon.
+//
+//go:embed warning.png
+var warningPNG []byte
 
 type desktopNotifier struct{}
 
@@ -26,7 +31,7 @@ func newPlatformNotifier() notifier {
 //
 // @return          error    "nil on success, or an error from beeep"
 func (desktopNotifier) Alert(title, content string) error {
-	return beeep.Alert(title, content, assets.WarningPNG)
+	return beeep.Alert(title, content, warningPNG)
 }
 
 // @description    Performs no availability warning on desktop platforms.
