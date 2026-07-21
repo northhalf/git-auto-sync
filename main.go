@@ -40,8 +40,9 @@ func warnIfNotificationUnavailable(_ *cli.Context) error {
 
 // @description    Runs the command-line application.
 //
-// main builds the command-line application, configures logging, runs the requested command, and
-// terminates with a nonzero status when command execution fails.
+// main adopts the Android device timezone, builds the command-line application, configures
+// logging, runs the requested command, and terminates with a nonzero status when command
+// execution fails.
 func main() {
 	app := &cli.App{
 		Name:                 "git-auto-sync",
@@ -219,6 +220,7 @@ func main() {
 	// otherwise make urfave/cli report "No help topic for '<path>'" and exit.
 	args := os.Args
 	if runtime.GOOS == "android" {
+		termux.ApplyLocalTimezone()
 		args = termux.SanitizeArgs(args)
 	}
 	err := app.Run(args)

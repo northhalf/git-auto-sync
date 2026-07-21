@@ -1,4 +1,4 @@
-// Package termux centralizes the exec workarounds the Termux (Android) environment requires.
+// Package termux centralizes the platform workarounds the Termux (Android) environment requires.
 //
 // Termux runs every dynamic binary through the Android dynamic linker: termux-exec
 // (LD_PRELOAD) rewrites execve(prog, [argv0, args...]) into execve(linker64, [prog, argv0,
@@ -10,6 +10,9 @@
 // execve of those with EACCES. Invoking linker64 with the program path as its argument
 // mirrors the termux-exec workaround, so Command routes subprocesses through it, ProgramPath
 // recovers the real program path, and SanitizeArgs drops the inserted argv duplicate.
+//
+// Separately, Go's android builds pin time.Local to UTC regardless of the device timezone;
+// ApplyLocalTimezone adopts the device zone so timestamps match the local clock.
 package termux
 
 import (
