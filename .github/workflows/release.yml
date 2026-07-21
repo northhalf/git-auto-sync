@@ -8,6 +8,7 @@ on:
 jobs:
   goreleaser:
     runs-on: macos-latest
+    environment: deploy
     steps:
       - name: Checkout
         uses: actions/checkout@v7
